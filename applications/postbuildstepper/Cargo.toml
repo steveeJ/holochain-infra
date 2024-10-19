@@ -6,3 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.90"
+config = { version = "0.14.0", features = ["json", "json5", "toml"] }
+env_logger = "0.11.5"
+log = "0.4.22"
+pcre2 = "0.2.9"
+serde_json = "1.0.132"
+tempfile = "3.13.0"

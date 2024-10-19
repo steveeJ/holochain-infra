@@ -1,6 +1,8 @@
 {
   # System independent arguments.
   self,
+  inputs,
+  lib,
   ...
 }:
 {
