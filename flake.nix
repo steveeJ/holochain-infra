@@ -56,7 +56,6 @@
     };
     crane = {
       url = "github:ipetkov/crane";
-      inputs.nixpkgs.follows = "craneNixpkgs";
     };
 
     keys_steveej = {
