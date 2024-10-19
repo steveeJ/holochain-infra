@@ -1631,16 +1631,16 @@
     "tx5": {
       "flake": false,
       "locked": {
-        "lastModified": 1710791497,
-        "narHash": "sha256-DfuppR6geBawupO8WnssXMZEOQxP0/FPPlfSmr93vlo=",
+        "lastModified": 1728658226,
+        "narHash": "sha256-d+11SBg+WXvpUOosZSA5bP1m7W0Zioyf7GPOKkISG6Q=",
         "owner": "holochain",
         "repo": "tx5",
-        "rev": "af0ecea9bee17f4e6230b15dd4af89bb0fc98bd9",
+        "rev": "4e293404db2d48fcf674f6c6d7c19d7d5d8c65bf",
         "type": "github"
       },
       "original": {
         "owner": "holochain",
-        "ref": "tx5-signal-srv-v0.0.8-alpha",
+        "ref": "tx5-signal-srv-v0.0.15-alpha",
         "repo": "tx5",
         "type": "github"
       }
