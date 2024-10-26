@@ -92,6 +92,10 @@
                 ];
                 mountpoint = "/nix";
               };
+              "/swap" = {
+                mountpoint = "/.swapvol";
+                swap.swapfile.size = "32G";
+              };
             };
           };
         };
