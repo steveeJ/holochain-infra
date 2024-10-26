@@ -49,8 +49,6 @@
 
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  systemd.network.networks."10-uplink".networkConfig.Address = config.passthru.primaryIpv6;
-
   disko.devices.disk.sda = {
     device = "/dev/sda";
     type = "disk";
