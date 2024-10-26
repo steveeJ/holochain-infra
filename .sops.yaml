@@ -13,7 +13,7 @@ keys:
   - &linux-builder-01 age1kxkr407jz77ljrhgsfwfmv2yvqjprc6unvx389xp2f48xj8r0vqq2wew5r
   - &x64-linux-dev-01 age1vlxerq9j9jd00qvxj2gxds9re4dz2djqmllkhzsf44gz9a5y4ghs7807h9
   - &linux-builder-2 age1w99tzxl88z7ct3ekpatl62wvhrx29pg450qmn822dpmz0evhxqxqy3scux
-  - &aarch64-linux-builder-0 age1rpmrp20j46ekhwqa4wqu8q36lhxs3r6zlujp7c8cer4288wqycuqzp7jce
+  - &aarch64-linux-builder-0 age1jsahf924uux57g2qw4xqt9tne6hh0n454lk3txxg3jrrpxjdkaxq7rskq2
   - &tfgrid-shared age194xfar0gfdauu2dcxwqk9lh9d0vjfrzzs2ke0ppanpwv9eqxzs2qp7q7cn
   - &buildbot-nix-0 age1eel2m3jsanly3np5anytwyjze70v509mje2yu562e2k70ctdsvrqj23x20
   - &monitoring-0 age1cpcwv2wlszwase38zpngk6ld3vx8ev8jsv38m9pp74jvlutvxpsqt49yrr
