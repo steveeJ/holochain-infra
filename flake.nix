@@ -492,6 +492,66 @@
         # The usual flake attributes can be defined here, including system-
         # agnostic ones like nixosModule and system-enumerating ones, although
         # those are more easily expressed in perSystem.
+
+        lib = {
+          # see https://github.com/NixOS/nixpkgs/blob/c6fd903606866634312e40cceb2caee8c0c9243f/nixos/tests/custom-ca.nix#L16C1-L66C6
+          makeCert =
+            {
+              pkgs,
+              caName,
+              domain,
+            }:
+            pkgs.runCommand "example-cert" { buildInputs = [ pkgs.gnutls ]; } ''
+              mkdir $out
+
+              # CA cert template
+              cat >ca.template <<EOF
+              organization = "${caName}"
+              cn = "${caName}"
+              expiration_days = 365
+              ca
+              cert_signing_key
+              crl_signing_key
+              EOF
+
+              # server cert template
+              cat >server.template <<EOF
+              organization = "An example company"
+              cn = "${domain}"
+              expiration_days = 30
+              dns_name = "${domain}"
+              encryption_key
+              signing_key
+              EOF
+
+              # generate CA keypair
+              certtool                \
+                --generate-privkey    \
+                --key-type rsa        \
+                --sec-param High      \
+                --outfile $out/ca.key
+              certtool                     \
+                --generate-self-signed     \
+                --load-privkey $out/ca.key \
+                --template ca.template     \
+                --outfile $out/ca.crt
+
+              # generate server keypair
+              certtool                    \
+                --generate-privkey        \
+                --key-type rsa            \
+                --sec-param High          \
+                --outfile $out/server.key
+              certtool                            \
+                --generate-certificate            \
+                --load-privkey $out/server.key    \
+                --load-ca-privkey $out/ca.key     \
+                --load-ca-certificate $out/ca.crt \
+                --template server.template        \
+                --outfile $out/server.crt
+            '';
+
+        };
       };
     };
 }
