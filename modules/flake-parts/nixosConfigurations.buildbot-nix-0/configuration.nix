@@ -47,6 +47,12 @@
       oauthId = "Iv23liqmAiBw8ab9EF61";
       topic = "holo-chain-buildbot-nix-0";
     };
+
+    buildbot-secrets = {
+      # NOTE: for security reasons this secret is kept out of the public repo
+      "cacheHoloHost2secret" = "/var/lib/secrets/cache.holo.host-2/secret";
+      "awsSharedCredentialsFile" = config.sops.secrets.holo-host-aws-shared-credentials.path;
+    };
   };
 
   networking = {
@@ -194,6 +200,9 @@
   sops.secrets.buildbot-nix-workers = { };
   # sops.secrets.cachix-auth-token = {};
 
+  systemd.services.buildbot-master.serviceConfig.LoadCredential = builtins.map (
+    kv: "${kv.name}:${kv.value}"
+  ) (lib.attrsets.attrsToList config.passthru.buildbot-secrets);
   services.buildbot-nix.master = {
     enable = true;
     admins = [
@@ -230,10 +239,9 @@
       inherit (config.passthru.buildbot-nix) oauthId topic;
     };
 
-    postBuildSteps = [
-      {
-        name = "post-build-step-test";
-        environment =
+    postBuildSteps =
+      let
+        commonEnvironment =
           let
             props = lib.attrsets.genAttrs [
               "attr"
@@ -267,27 +275,37 @@
             props' = lib.attrsets.mapAttrs' (name: value: lib.nameValuePair "PROP_${name}" value) props;
           in
           props';
-        command = [
-          (builtins.toString (
-            pkgs.writeShellScript "post-buld-step-test-script" ''
-              set -eEu -o pipefail
 
-              echo Running example postBuildStep...
+      in
+      [
+        {
+          /*
+            TODO(observe): verify any of these aren't required
 
-              echo args: "$@"
-              env
-              pwd
-              ls -lha
-              ls -lha ..
-              ls -lha ../..
+            ```nix
+            binary_cache_public_uri = https://cache.holo.host
+            log_prefix = https://cache.holo.host/
+            server_store_uri = https://cache.holo.host?local-nar-cache=/var/cache/hydra/nar-cache
+            upload_logs_to_binary_cache = true
+            ```
+          */
+          name = "sign-and-upload";
+          environment =
+            commonEnvironment
+            # verified with
+            # nix-repl> (builtins.elemAt nixosConfigurations.buildbot-nix-0.config.services.buildbot-nix.master.postBuildSteps 1).environment
+            // builtins.listToAttrs (
+              builtins.map (
+                name:
+                lib.attrsets.nameValuePair "SECRET_${name}" (
+                  self.inputs.buildbot-nix.lib.interpolate "%(secret:${name})s"
+                )
+              ) (builtins.attrNames config.passthru.buildbot-secrets)
+            );
+          command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
+        }
 
-              echo Done.
-            ''
-          ))
-        ];
-      }
-
-    ];
+      ];
   };
 
   # magic_rb:
@@ -307,6 +325,8 @@
   ];
 
   sops.secrets.holo-host-github-environment-secrets = { };
-  systemd.services.nix-daemon.serviceConfig.EnvironmentFile =
-    config.sops.secrets.holo-host-github-environment-secrets.path;
+  sops.secrets.holo-host-aws-shared-credentials = { };
+  systemd.services.nix-daemon.serviceConfig = {
+    EnvironmentFile = [ config.sops.secrets.holo-host-github-environment-secrets.path ];
+  };
 }
