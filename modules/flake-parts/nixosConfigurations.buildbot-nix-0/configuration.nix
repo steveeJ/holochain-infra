@@ -46,6 +46,7 @@
       appId = 1008744;
       oauthId = "Iv23liqmAiBw8ab9EF61";
       topic = "holo-chain-buildbot-nix-0";
+      channelsFqdn = "buildbot-nix-0-channels.${config.passthru.domain}";
     };
 
     buildbot-secrets = {
