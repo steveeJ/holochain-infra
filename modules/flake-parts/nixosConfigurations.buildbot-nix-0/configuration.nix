@@ -47,6 +47,7 @@
       oauthId = "Iv23liqmAiBw8ab9EF61";
       topic = "holo-chain-buildbot-nix-0";
       channelsFqdn = "buildbot-nix-0-channels.${config.passthru.domain}";
+      channelsDirectory = "/var/www/buildbot/nix-channels";
     };
 
     buildbot-secrets = {
@@ -193,6 +194,22 @@
     forceSSL = true;
   };
 
+  # configure the nix-channels directory.
+  # it's made writable for nginx and buildbot-worker
+  systemd.tmpfiles.rules = [
+    "d ${config.passthru.buildbot-nix.channelsDirectory} 0755 buildbot-worker buildbot-worker - -"
+  ];
+  services.nginx.virtualHosts."${config.passthru.buildbot-nix.channelsFqdn}" = {
+    enableACME = true;
+    forceSSL = true;
+    locations."/channel/custom/holo-nixpkgs/" = {
+      alias = "${config.passthru.buildbot-nix.channelsDirectory}/";
+      extraConfig = ''
+        autoindex on;
+      '';
+    };
+  };
+
   sops.defaultSopsFile = self + "/secrets/${config.networking.hostName}/secrets.yaml";
 
   sops.secrets.buildbot-github-oauth-secret = { };
@@ -302,7 +319,10 @@
                   self.inputs.buildbot-nix.lib.interpolate "%(secret:${name})s"
                 )
               ) (builtins.attrNames config.passthru.buildbot-secrets)
-            );
+            )
+            // {
+              PBS_CHANNELS_DIRECTORY = config.passthru.buildbot-nix.channelsDirectory;
+            };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
         }
 
