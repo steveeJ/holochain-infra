@@ -57,6 +57,9 @@
           postbuildstepper-testpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
             mkdir -p $out/bin
             echo "echo hello postbuildstepper" > $out/bin/postbuildstepper-testpkg
+
+            mkdir -p $out/tarballs/
+            echo "1337 tarball" > $out/tarballs/nixexprs.tar.xz
           '';
 
           postbuildstepper = lib.makeOverridable craneLib.buildPackage (
@@ -110,6 +113,29 @@
             export PROP_out_path="${self'.packages.postbuildstepper-testpkg}"
             # this needs to be `cat`ed because the program expects this to contain the content of the file.
             export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
+
+            exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
+          '';
+
+          postbuildstepper-test-channel = pkgs.writeShellScriptBin "test" ''
+            set -x
+
+            export PROP_owners="['steveej']"
+            export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
+            export PROP_project="Holo-Host/holo-nixpkgs" \
+            export PROP_attr="aarch64-linux.holo-nixpkgs-release"
+            export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
+            export PROP_out_path="${self'.packages.postbuildstepper-testpkg}"
+            # this needs to be `cat`ed because the program expects this to contain the content of the file.
+            export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
+
+
+            # TODO: DRY all of these
+            export PBS_CHANNELS_DIRECTORY="/tmp/channels/"
+            mkdir -p $PBS_CHANNELS_DIRECTORY
+            export PROP_event="pull_request"
+            export PROP_pullrequesturl="unchecked/1337"
+            export PROP_basename="unused";
 
             exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
           '';
@@ -236,6 +262,9 @@
               machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
 
               machine.succeed("nix copy --trusted-public-keys ${cachePublicKey} --from https://cache.holo.host --to ./store ${self'.packages.postbuildstepper-testpkg}", timeout = 30)
+
+              machine.succeed("${lib.getExe self'.checks.postbuildstepper-test-channel}", timeout = 30)
+              machine.succeed("grep '1337 tarball' /tmp/channels/1337/holo-nixpkgs/nixexprs.tar.xz", timeout = 30)
             '';
           };
         };
