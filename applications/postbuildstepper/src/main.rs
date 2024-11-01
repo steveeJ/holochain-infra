@@ -17,6 +17,7 @@ fn main() -> anyhow::Result<()> {
 
     let SigningAndCopyInfo {
         signing_key_file,
+        extra_nix_arg,
         copy_envs,
         copy_destination,
     } = if let Some(info) = business::may_get_signing_key_and_copy_info(&build_info)? {
@@ -38,14 +39,15 @@ fn main() -> anyhow::Result<()> {
     // sign the store path
     util::nix_cmd_helper(
         [
-            "store",
-            "sign",
-            "--verbose",
-            "--recursive",
-            "--key-file",
-            signing_key_file_path,
-            &store_path,
-        ],
+            vec!["store", "sign", "--verbose", "--recursive", "--key-file"],
+            if let Some(arg) = extra_nix_arg {
+                vec![arg]
+            } else {
+                vec![]
+            },
+            vec![signing_key_file_path, &store_path],
+        ]
+        .concat(),
         HashMap::<&&str, &str>::new(),
     )?;
     info!("successfully signed store path {store_path}");
@@ -57,6 +59,8 @@ fn main() -> anyhow::Result<()> {
     )
     .context(format!("pushing {store_path} to {copy_destination}"))?;
     info!("successfully pushed store path {store_path}");
+
+    business::process_holo_nixpkgs_release(build_info)?;
 
     Ok(())
 }
@@ -102,6 +106,15 @@ mod util {
 
         Ok(signing_key_file_path)
     }
+
+    pub(crate) fn is_re_match_lossy(re: &str, attr: &str, prefix: &str) -> anyhow::Result<bool> {
+        let compiled_re = pcre2::bytes::Regex::new(re)?;
+        let is_match = compiled_re.is_match(attr.as_bytes())?;
+
+        log::debug!("[{attr}/{prefix}]: '{re}' matched '{attr}': {is_match}");
+
+        Ok(is_match)
+    }
 }
 
 mod business {
@@ -109,12 +122,18 @@ mod business {
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
+        path::PathBuf,
         rc::Rc,
     };
 
-    use anyhow::{bail, Context, Result};
+    use anyhow::{anyhow, bail, Context, Result};
     use log::{debug, info, trace, warn};
     use tempfile::NamedTempFile;
+
+    use crate::util::is_re_match_lossy;
+
+    // TODO(backlog): create a config map for this
+    static CHANNELS_DIRECTORY_ENV_KEY: &str = "PBS_CHANNELS_DIRECTORY";
 
     #[derive(Debug)]
     pub(crate) struct BuildInfo(HashMap<String, String>);
@@ -130,7 +149,9 @@ mod business {
 
             new_self
         }
-        fn get(&self, var: &str) -> Result<&String> {
+
+        // allows looking up variables in the internal map
+        pub(crate) fn get(&self, var: &str) -> Result<&String> {
             self.0
                 .get(var)
                 .ok_or_else(|| anyhow::anyhow!("looking up {var} in {self:#?}"))
@@ -171,6 +192,47 @@ mod business {
         pub(crate) fn try_repository(&self) -> Result<&String> {
             self.get("PROP_repository")
         }
+
+        /// Example: PROP_event=pull_request
+        pub(crate) fn try_event(&self) -> Result<BuildInfoEvent> {
+            let raw = self.get("PROP_event")?;
+
+            match raw.as_str() {
+                "pull_request" => {
+                    let url = self.try_pullrequesturl()?;
+                    let number = url
+                        .rsplit_once("/")
+                        .ok_or(anyhow!("couldn't find '/' in {url}"))?
+                        .1
+                        .to_string();
+                    let _base_branch = self.try_basename()?.to_string();
+
+                    Ok(BuildInfoEvent::PullRequest {
+                        number,
+                        _base_branch,
+                    })
+                }
+
+                _ => bail!("unsupported event: {raw}"),
+            }
+        }
+
+        fn try_pullrequesturl(&self) -> Result<&String> {
+            self.get("PROP_pullrequesturl")
+        }
+
+        fn try_basename(&self) -> Result<&String> {
+            self.get("PROP_basename")
+        }
+    }
+
+    /// Represents information about the event, e.g. a pull request.
+    pub(crate) enum BuildInfoEvent {
+        PullRequest {
+            number: String,
+            _base_branch: String,
+            // TODO: destination_branch: String,
+        },
     }
 
     /// Verifies that the build current owners are trusted.
@@ -192,6 +254,7 @@ mod business {
         pub(crate) signing_key_file: NamedTempFile,
         pub(crate) copy_envs: HashMap<OsString, NamedTempFile>,
         pub(crate) copy_destination: String,
+        pub(crate) extra_nix_arg: Option<&'static str>,
     }
 
     /// Evaluates the project org and accordingly returns a signing key.
@@ -246,6 +309,7 @@ mod business {
                 signing_key_file: wrap_secret_in_tempfile(signing_secret)?,
                 copy_envs,
                 copy_destination,
+                extra_nix_arg: None,
             }))
         } else if org == "holochain" {
             info!("{org} doesn't have any credentials for signing and copying builds.");
@@ -256,15 +320,6 @@ mod business {
     }
 
     pub(crate) fn evaluate_filters(build_info: &BuildInfo) -> Result<bool, anyhow::Error> {
-        let is_match_lossy = |re: &str, attr: &str, prefix: &str| -> anyhow::Result<bool> {
-            let compiled_re = pcre2::bytes::Regex::new(re)?;
-            let is_match = compiled_re.is_match(attr.as_bytes())?;
-
-            debug!("[{attr}/{prefix}]: '{re}' matched '{attr}': {is_match}");
-
-            Ok(is_match)
-        };
-
         const HOLOCHAIN_INFRA_REPO: &str = "https://github.com/holochain/holochain-infra";
         const HOLO_NIXPKGS_REPO: &str = "https://github.com/Holo-Host/holo-nixpkgs";
         #[derive(Default)]
@@ -304,14 +359,14 @@ mod business {
                 .include_filters_re
                 .iter()
                 .try_fold(false, |prev, re| {
-                    anyhow::Ok(prev || is_match_lossy(re, attr, "include")?)
+                    anyhow::Ok(prev || is_re_match_lossy(re, attr, "include")?)
                 })?;
 
             let exclude = filters
                 .exclude_filters_re
                 .iter()
                 .try_fold(false, |prev, re| {
-                    anyhow::Ok(prev || is_match_lossy(re, attr, "include")?)
+                    anyhow::Ok(prev || is_re_match_lossy(re, attr, "include")?)
                 })?;
 
             let conclusion = include && !exclude;
@@ -324,6 +379,59 @@ mod business {
         };
 
         Ok(conclusion)
+    }
+
+    pub(crate) fn process_holo_nixpkgs_release(
+        build_info: BuildInfo,
+    ) -> Result<Option<PathBuf>, anyhow::Error> {
+        if build_info.try_org_repo()? == ("Holo-Host", "holo-nixpkgs")
+            && build_info.try_attr()?.ends_with(".holo-nixpkgs-release")
+        {
+            let channel_attr_out_path = build_info.try_out_path()?;
+            let tarball_path =
+                std::path::Path::new(&channel_attr_out_path).join("tarballs/nixexprs.tar.xz");
+            if !tarball_path.exists() {
+                bail!("{tarball_path:#?} doesn't exist");
+            }
+
+            let pbs_channels_directory: &str = build_info.get(CHANNELS_DIRECTORY_ENV_KEY)?;
+
+            match build_info.try_event()? {
+                BuildInfoEvent::PullRequest { number, .. } => {
+                    // symlink the tarball to <base-path>/<pr_number>/holo-nixpkgs/nixexprs.tar.xz
+                    let link_output_dir = std::path::Path::new(pbs_channels_directory)
+                        .join(number)
+                        .join("holo-nixpkgs");
+                    let link_output_path = link_output_dir.join("nixexprs.tar.xz");
+                    let link_output_path_tmp = link_output_dir.join("nixexprs.tar.xz.tmp");
+
+                    std::fs::create_dir_all(&link_output_dir)
+                        .context(format!("creating to contain symlink {link_output_dir:#?}"))?;
+
+                    if std::fs::exists(&link_output_path_tmp).context(format!(
+                        "checking the existence of {link_output_path_tmp:#?}"
+                    ))? {
+                        std::fs::remove_file(&link_output_path_tmp)
+                            .context(format!("removing {link_output_path_tmp:#?}"))?;
+                    }
+
+                    std::os::unix::fs::symlink(&tarball_path, &link_output_path_tmp).context(
+                        format!("create symlink to {tarball_path:#?} at {link_output_path_tmp:#?}"),
+                    )?;
+                    std::fs::rename(&link_output_path_tmp, &link_output_path).context(format!(
+                        "renaming {link_output_path_tmp:#?} to {link_output_path:#?}"
+                    ))?;
+
+                    // TODO(backlog) copy the tarball to <base-path>/<source_branch>/holo-nixpkgs
+
+                    return Ok(Some(link_output_path));
+                }
+            }
+
+            // TODO(backlog) for push events, copy the tarball to <base-path>/<branch>/holo-nixpkgs,
+        }
+
+        Ok(None)
     }
 }
 
