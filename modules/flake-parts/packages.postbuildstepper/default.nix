@@ -54,14 +54,6 @@
           postbuildstepperDeps = lib.makeOverridable craneLib.buildDepsOnly postbuildstepperArgs;
         in
         {
-          postbuildstepper-testpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
-            mkdir -p $out/bin
-            echo "echo hello postbuildstepper" > $out/bin/postbuildstepper-testpkg
-
-            mkdir -p $out/tarballs/
-            echo "1337 tarball" > $out/tarballs/nixexprs.tar.xz
-          '';
-
           postbuildstepper = lib.makeOverridable craneLib.buildPackage (
             postbuildstepperArgs // { cargoArtifacts = postbuildstepperDeps; }
           );
@@ -100,6 +92,20 @@
 
           cacheSecretKey = "testing-2:CoS7sAPcH1M+LD+D/fg9sc1V3uKk88VMHZ/MvAJHsuMSasehxxlUKNa0LUedGgFfA1wlRYF74BNcAldRxX2g8A==";
           cachePublicKey = "testing-2:EmrHoccZVCjWtC1HnRoBXwNcJUWBe+ATXAJXUcV9oPA=";
+
+          pbsChannelDirectory = "/tmp/channels";
+          testPullReqestNumber = "1337";
+          tarballTestString = "${testPullReqestNumber} ${testPullReqestNumber}";
+          pkgTarballPath = "tarballs/nixexprs.tar.xz";
+          serveTarballPath = "${testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
+
+          postbuildstepperTestpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
+            mkdir -p $out/bin
+            echo "echo hello postbuildstepper" > $out/bin/postbuildstepper-testpkg
+
+            mkdir -p $out/$(dirname ${pkgTarballPath})
+            echo "${tarballTestString}" > $out/${pkgTarballPath}
+          '';
         in
         lib.attrsets.optionalAttrs (pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64) {
           postbuildstepper-test = pkgs.writeShellScriptBin "test" ''
@@ -108,9 +114,9 @@
             export PROP_owners="['steveej']"
             export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
             export PROP_project="Holo-Host/holo-nixpkgs" \
-            export PROP_attr="aarch64-linux.${self'.packages.postbuildstepper-testpkg.name}"
+            export PROP_attr="aarch64-linux.${postbuildstepperTestpkg.name}"
             export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
-            export PROP_out_path="${self'.packages.postbuildstepper-testpkg}"
+            export PROP_out_path="${postbuildstepperTestpkg}"
             # this needs to be `cat`ed because the program expects this to contain the content of the file.
             export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
 
@@ -125,16 +131,17 @@
             export PROP_project="Holo-Host/holo-nixpkgs" \
             export PROP_attr="aarch64-linux.holo-nixpkgs-release"
             export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
-            export PROP_out_path="${self'.packages.postbuildstepper-testpkg}"
+            export PROP_out_path="${postbuildstepperTestpkg}"
             # this needs to be `cat`ed because the program expects this to contain the content of the file.
             export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
 
 
-            # TODO: DRY all of these
-            export PBS_CHANNELS_DIRECTORY="/tmp/channels/"
+            export PBS_CHANNELS_DIRECTORY="${pbsChannelDirectory}"
+
             mkdir -p $PBS_CHANNELS_DIRECTORY
+            # TODO: DRY further
             export PROP_event="pull_request"
-            export PROP_pullrequesturl="unchecked/1337"
+            export PROP_pullrequesturl="unchecked/${testPullReqestNumber}"
             export PROP_basename="unused";
 
             exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
@@ -171,7 +178,7 @@
                   ];
 
                   # add the testpkg to the closure at buildtime. otherwise `nix sign/copy` will try to build or fetch it
-                  environment.systemPackages = [ self'.packages.postbuildstepper-testpkg ];
+                  environment.systemPackages = [ postbuildstepperTestpkg ];
 
                   services.minio = {
                     enable = true;
@@ -225,46 +232,49 @@
               #   timeout = None
               # )
 
-
               machine.wait_for_unit("caddy.service")
 
-              machine.succeed("${pkgs.writeShellScript "prepare-minio" ''
-                export PATH=${pkgs.minio-client}/bin:$PATH
+              with subtest("sign stores paths and push them to s3"):
+                machine.succeed("${pkgs.writeShellScript "prepare-minio" ''
+                  export PATH=${pkgs.minio-client}/bin:$PATH
 
-                set -xe
+                  set -xe
 
-                mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
-                mc mb localhost/${s3.bucket}
+                  mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
+                  mc mb localhost/${s3.bucket}
 
-                # create a non-admin user with write permissions
-                mc admin user add localhost ${s3.userKey} ${s3.userSecret}
-                mc admin policy attach localhost readwrite --user ${s3.userKey}
-                mc alias set user "https://${s3.endpoint}" "${s3.userKey}" "${s3.userSecret}"
+                  # create a non-admin user with write permissions
+                  mc admin user add localhost ${s3.userKey} ${s3.userSecret}
+                  mc admin policy attach localhost readwrite --user ${s3.userKey}
+                  mc alias set user "https://${s3.endpoint}" "${s3.userKey}" "${s3.userSecret}"
 
-                # allow anonymous access to the "cache"
-                mc anonymous set --recursive download localhost/${s3.bucket}
+                  # allow anonymous access to the "cache"
+                  mc anonymous set --recursive download localhost/${s3.bucket}
 
-                # this file is GET'ed by `nix copy`
-                echo "StoreDir: /nix/store" > nix-cache-info
-                mc cp nix-cache-info user/${s3.bucket}/nix-cache-info
-                # mc cp nix-cache-info localhost/${s3.bucket}/nix-cache-info
+                  # this file is GET'ed by `nix copy`
+                  echo "StoreDir: /nix/store" > nix-cache-info
+                  mc cp nix-cache-info user/${s3.bucket}/nix-cache-info
+                  # mc cp nix-cache-info localhost/${s3.bucket}/nix-cache-info
 
-                for remote in \
-                    https://${s3.endpoint}/${s3.bucket}/nix-cache-info \
-                    https://${s3.bucket}/nix-cache-info \
-                    ; do
-                  diff --report-identical-files <(curl ''${remote}) nix-cache-info
-                done
+                  for remote in \
+                      https://${s3.endpoint}/${s3.bucket}/nix-cache-info \
+                      https://${s3.bucket}/nix-cache-info \
+                      ; do
+                    diff --report-identical-files <(curl ''${remote}) nix-cache-info
+                  done
 
 
-              ''}", timeout = 10)
+                ''}", timeout = 10)
 
-              machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
+                machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
+                machine.succeed("nix copy --trusted-public-keys ${cachePublicKey} --from https://cache.holo.host --to ./store ${postbuildstepperTestpkg}", timeout = 30)
 
-              machine.succeed("nix copy --trusted-public-keys ${cachePublicKey} --from https://cache.holo.host --to ./store ${self'.packages.postbuildstepper-testpkg}", timeout = 30)
+              with subtest("filesystem probe for holo-nixpkgs-release tarballs"):
+                machine.fail("grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPath}", timeout = 30)
+                machine.succeed("${lib.getExe self'.checks.postbuildstepper-test-channel}", timeout = 30)
+                machine.succeed("grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPath}", timeout = 30)
 
-              machine.succeed("${lib.getExe self'.checks.postbuildstepper-test-channel}", timeout = 30)
-              machine.succeed("grep '1337 tarball' /tmp/channels/1337/holo-nixpkgs/nixexprs.tar.xz", timeout = 30)
+              # TODO(backlog): test the served HTTP endpoint for the tarball with nix-channel --add and nix-channel --update
             '';
           };
         };

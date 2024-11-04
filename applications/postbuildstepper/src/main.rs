@@ -401,7 +401,9 @@ mod business {
                     // symlink the tarball to <base-path>/<pr_number>/holo-nixpkgs/nixexprs.tar.xz
                     let link_output_dir = std::path::Path::new(pbs_channels_directory)
                         .join(number)
+                        // TODO: read this from environment
                         .join("holo-nixpkgs");
+                    // TODO: create config map for this
                     let link_output_path = link_output_dir.join("nixexprs.tar.xz");
                     let link_output_path_tmp = link_output_dir.join("nixexprs.tar.xz.tmp");
 
@@ -421,6 +423,8 @@ mod business {
                     std::fs::rename(&link_output_path_tmp, &link_output_path).context(format!(
                         "renaming {link_output_path_tmp:#?} to {link_output_path:#?}"
                     ))?;
+
+                    info!("created symlink to {tarball_path:#?} at {link_output_path:#?}");
 
                     // TODO(backlog) copy the tarball to <base-path>/<source_branch>/holo-nixpkgs
 
