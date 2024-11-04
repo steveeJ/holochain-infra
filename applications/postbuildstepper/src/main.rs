@@ -238,8 +238,23 @@ mod business {
     /// Verifies that the build current owners are trusted.
     // FIXME: make trusted owners configurable
     pub(crate) fn check_owners(owners: HashSet<String>) -> anyhow::Result<()> {
-        const TRUSTED_OWNERS: [&str; 1] = ["steveej"];
-        let trusted_owners = HashSet::<String>::from_iter(TRUSTED_OWNERS.map(ToString::to_string));
+        const TRUSTED_OWNERS: &[&str] = &[
+            // bots
+            "github-actions",
+            // admins
+            "steveej",
+            "evangineer",
+            // devs
+            "ThetaSinner",
+            "cduster",
+            "zippy",
+            "JettTech",
+            "mattgeddes",
+            "zeeshan595",
+            "zo-el",
+        ];
+        let trusted_owners =
+            HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(ToString::to_string));
         let owner_is_trusted = owners.is_subset(&trusted_owners);
         if !owner_is_trusted {
             bail!("{owners:?} are *NOT* trusted!");
