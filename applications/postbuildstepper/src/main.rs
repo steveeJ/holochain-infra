@@ -356,12 +356,7 @@ mod business {
             (
                 HOLO_NIXPKGS_REPO,
                 Filters {
-                    include_filters_re: [
-                        "aarch64-[^.]+\\.postbuildstepper-testpkg",
-                        ".*\\.holo-nixpkgs-release",
-                    ]
-                    .map(Into::into)
-                    .into(),
+                    include_filters_re: [".*"].map(Into::into).into(),
                     exclude_filters_re: [".*tests.*".into()].into(),
                 },
             ),
