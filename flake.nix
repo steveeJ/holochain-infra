@@ -314,18 +314,71 @@
                   ];
                 }
               );
-            in
-            inputs.devshell.legacyPackages.${system}.mkShell {
-              packagesFrom = [
-                (craneLib.devShell {
-                  # Automatically inherit any build inputs from `my-crate`
-                  inputsFrom = [ ];
+              devMinioOsConfig = self.nixosConfigurations.x64-linux-dev-01.config;
+              devshell = inputs.devshell.legacyPackages.${system}.mkShell {
+                devshell.startup = {
+                  pre-commit.text = self.checks.${system}.pre-commit-check.shellHook;
+                  sops.text =
+                    ''
+                      if sops -d secrets/nomad/cli/keys.yaml 2>&1 >/dev/null; then
+                        REPO_SECRETS_DIR="''${HOME:?}/.holochain-infra-secrets"
+                        mkdir -p ''${REPO_SECRETS_DIR}
+                        chmod 700 ''${REPO_SECRETS_DIR}
+                        export NOMAD_CLIENT_KEY="''${REPO_SECRETS_DIR}/global-cli-nomad-key";
+                        sops -d secrets/nomad/cli/keys.yaml | yq '.global-cli-nomad-key' > ''${NOMAD_CLIENT_KEY:?}
+                      fi
+                    ''
+                    + (
+                      let
+                        minioUserPass = ''''${MINIO_ROOT_USER}:''${MINIO_ROOT_PASSWORD}'';
+                        minioDevHost = devMinioOsConfig.services.devMinio.s3Domain + ":443";
+                        minioDevLocalHost = "127.0.0.1:${builtins.toString devMinioOsConfig.services.devMinio.listenPort}";
+                        minioRegion = devMinioOsConfig.services.devMinio.region;
+                      in
+                      ''
+                        if sops -d secrets/minio/server.yaml 2>&1 >/dev/null; then
+                          source <(sops -d secrets/minio/server.yaml | yq '.minio_root_credentials')
 
-                  # Extra inputs (only used for interactive development)
-                  # can be added here; cargo and rustc are provided by default.
-                  packages = [ (cranePkgs.stdenvAdapters.useMoldLinker cranePkgs.stdenv).cc ];
+                          export MC_HOST_devminio_local="http://${minioUserPass}@${minioDevLocalHost}";
+                          export MC_HOST_devminio="https://${minioUserPass}@${minioDevHost}"
+
+                          export RFS_HOST_devminio_region="${minioRegion}"
+                          export RFS_HOST_devminio_local="s3://${minioUserPass}@${minioDevLocalHost}"
+                          export RFS_HOST_devminio="s3s://${minioUserPass}@${minioDevHost}"
+                        fi
+                      ''
+                    );
+                };
+
+                env = [
+                  {
+                    name = "NOMAD_ADDR";
+                    value = nomadAddr;
+                  }
+                  {
+                    name = "NOMAD_CACERT";
+                    value = "${nomadCaCert}";
+                  }
+                  {
+                    name = "NOMAD_CLIENT_CERT";
+                    value = "${nomadClientCert}";
+                  }
+                ];
+
+              };
+            in
+            craneLib.devShell {
+              # Automatically inherit any build inputs from `my-crate`
+              inputsFrom = [
+                devshell
+                (self'.packages.postbuildstepper.override {
+                  inherit craneLib;
+                  stdenv = (cranePkgs.stdenvAdapters.useMoldLinker cranePkgs.stdenv);
                 })
               ];
+
+              # Extra inputs (only used for interactive development)
+              # can be added here; cargo and rustc are provided by default.
               packages =
                 [
                   treefmtWrapper
@@ -394,58 +447,6 @@
                   ++ (lib.lists.flatten (builtins.map (cmd: cmd.runtimeInputs or [ ]) zosCmds))
                 )
                 ++ self.checks.${system}.pre-commit-check.enabledPackages;
-
-              env = [
-                {
-                  name = "NOMAD_ADDR";
-                  value = nomadAddr;
-                }
-                {
-                  name = "NOMAD_CACERT";
-                  value = "${nomadCaCert}";
-                }
-                {
-                  name = "NOMAD_CLIENT_CERT";
-                  value = "${nomadClientCert}";
-                }
-              ];
-
-              devshell.startup = {
-                pre-commit.text = self.checks.${system}.pre-commit-check.shellHook;
-                sops.text =
-                  let
-                    devMinioOsConfig = self.nixosConfigurations.x64-linux-dev-01.config;
-                  in
-                  ''
-                    if sops -d secrets/nomad/cli/keys.yaml 2>&1 >/dev/null; then
-                      REPO_SECRETS_DIR="''${HOME:?}/.holochain-infra-secrets"
-                      mkdir -p ''${REPO_SECRETS_DIR}
-                      chmod 700 ''${REPO_SECRETS_DIR}
-                      export NOMAD_CLIENT_KEY="''${REPO_SECRETS_DIR}/global-cli-nomad-key";
-                      sops -d secrets/nomad/cli/keys.yaml | yq '.global-cli-nomad-key' > ''${NOMAD_CLIENT_KEY:?}
-                    fi
-                  ''
-                  + (
-                    let
-                      minioUserPass = ''''${MINIO_ROOT_USER}:''${MINIO_ROOT_PASSWORD}'';
-                      minioDevHost = devMinioOsConfig.services.devMinio.s3Domain + ":443";
-                      minioDevLocalHost = "127.0.0.1:${builtins.toString devMinioOsConfig.services.devMinio.listenPort}";
-                      minioRegion = devMinioOsConfig.services.devMinio.region;
-                    in
-                    ''
-                      if sops -d secrets/minio/server.yaml 2>&1 >/dev/null; then
-                        source <(sops -d secrets/minio/server.yaml | yq '.minio_root_credentials')
-
-                        export MC_HOST_devminio_local="http://${minioUserPass}@${minioDevLocalHost}";
-                        export MC_HOST_devminio="https://${minioUserPass}@${minioDevHost}"
-
-                        export RFS_HOST_devminio_region="${minioRegion}"
-                        export RFS_HOST_devminio_local="s3://${minioUserPass}@${minioDevLocalHost}"
-                        export RFS_HOST_devminio="s3s://${minioUserPass}@${minioDevHost}"
-                      fi
-                    ''
-                  );
-              };
             };
 
           packages =
