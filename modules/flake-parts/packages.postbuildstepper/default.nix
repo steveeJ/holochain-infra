@@ -15,13 +15,17 @@
       ...
     }:
 
-    {
-      # system specific outputs like, apps, checks, packages
+    let
+      cranePkgs = inputs.craneNixpkgs.legacyPackages.${system};
+      craneLib = inputs.crane.mkLib cranePkgs;
 
+    in
+
+    {
+
+      # system specific outputs like, apps, checks, packages
       packages =
         let
-          cranePkgs = inputs.craneNixpkgs.legacyPackages.${system};
-          craneLib = inputs.crane.mkLib cranePkgs;
 
           postbuildstepperArgs =
             let
@@ -49,15 +53,23 @@
 
               nativeBuildInputs = [ cranePkgs.pkg-config ];
 
+              buildInputs = [ cranePkgs.openssl ];
+
               doCheck = true;
             };
-          postbuildstepperDeps = lib.makeOverridable craneLib.buildDepsOnly postbuildstepperArgs;
+          postbuildstepperDeps = craneLib.buildDepsOnly postbuildstepperArgs;
+
+          mkPostbuildstepper =
+            { craneLib, ... }@args: craneLib.buildPackage (builtins.removeAttrs args [ "craneLib" ]);
         in
         {
-          postbuildstepper = lib.makeOverridable craneLib.buildPackage (
-            postbuildstepperArgs // { cargoArtifacts = postbuildstepperDeps; }
+          postbuildstepper = lib.makeOverridable mkPostbuildstepper (
+            postbuildstepperArgs
+            // {
+              inherit craneLib;
+              cargoArtifacts = postbuildstepperDeps;
+            }
           );
-
         };
 
       checks =
@@ -93,11 +105,30 @@
           cacheSecretKey = "testing-2:CoS7sAPcH1M+LD+D/fg9sc1V3uKk88VMHZ/MvAJHsuMSasehxxlUKNa0LUedGgFfA1wlRYF74BNcAldRxX2g8A==";
           cachePublicKey = "testing-2:EmrHoccZVCjWtC1HnRoBXwNcJUWBe+ATXAJXUcV9oPA=";
 
+          github = {
+            fixture = lib.importJSON "${self}/applications/postbuildstepper/fixtures/pull2410.json";
+            project = github.fixture.head.repo.full_name;
+            repository = github.fixture.head.repo.html_url;
+            testPullReqestNumber = builtins.toString github.fixture.number;
+            testPullReqestHeadRef = github.fixture.head.ref;
+            path = "/repos/${github.project}/pulls/${github.testPullReqestNumber}";
+            endpoint = "api.github.com";
+            uri = "https://${github.endpoint}${github.path}";
+
+            endpointCert = self.lib.makeCert {
+              inherit pkgs;
+              caName = "Example good CA";
+              domain = "${github.endpoint}";
+            };
+
+            testPat = "github_testpat";
+          };
+
           pbsChannelDirectory = "/tmp/channels";
-          testPullReqestNumber = "1337";
-          tarballTestString = "${testPullReqestNumber} ${testPullReqestNumber}";
+          tarballTestString = "${github.testPullReqestNumber} ${github.testPullReqestNumber}";
           pkgTarballPath = "tarballs/nixexprs.tar.xz";
-          serveTarballPath = "${testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
+          serveTarballPathNumber = "${github.testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
+          serveTarballPathHeadRef = "${github.testPullReqestHeadRef}/holo-nixpkgs/nixexprs.tar.xz";
 
           postbuildstepperTestpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
             mkdir -p $out/bin
@@ -114,36 +145,25 @@
             export PROP_owners="['steveej']"
             export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
             export PROP_project="Holo-Host/holo-nixpkgs" \
-            export PROP_attr="aarch64-linux.${postbuildstepperTestpkg.name}"
+            export PROP_attr="x86_64-linux.holo-nixpkgs-release"
             export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
             export PROP_out_path="${postbuildstepperTestpkg}"
             # this needs to be `cat`ed because the program expects this to contain the content of the file.
             export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
-
-            exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
-          '';
-
-          postbuildstepper-test-channel = pkgs.writeShellScriptBin "test" ''
-            set -x
-
-            export PROP_owners="['steveej']"
-            export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
-            export PROP_project="Holo-Host/holo-nixpkgs" \
-            export PROP_attr="aarch64-linux.holo-nixpkgs-release"
-            export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
-            export PROP_out_path="${postbuildstepperTestpkg}"
-            # this needs to be `cat`ed because the program expects this to contain the content of the file.
-            export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
-
 
             export PBS_CHANNELS_DIRECTORY="${pbsChannelDirectory}"
-
             mkdir -p $PBS_CHANNELS_DIRECTORY
+
             # TODO: DRY further
             export PROP_event="pull_request"
-            export PROP_pullrequesturl="unchecked/${testPullReqestNumber}"
-            export PROP_basename="unused";
+            export PROP_pullrequesturl="https://github.com/Holo-Host/holo-nixpkgs/pull/${github.testPullReqestNumber}"
+            export PROP_basename="develop"
+            export SECRET_githubUserAndPat="notoken=here
+            NIX_GITHUB_PRIVATE_PAT=${github.testPat}"
+            export SOURCE_BRANCH_CHANNELS="${github.testPullReqestHeadRef}";
 
+            export RUST_BACKTRACE=full
+            export RUST_LOG=trace
             exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
           '';
 
@@ -164,18 +184,22 @@
                     "127.0.0.1" = [
                       s3.bucket
                       s3.endpoint
+                      github.endpoint
                     ];
                   };
 
                   security.pki.certificateFiles = [
                     "${s3.endpointCert}/ca.crt"
                     "${s3.bucketCert}/ca.crt"
+                    "${github.endpointCert}/ca.crt"
                   ];
 
                   nix.settings.experimental-features = [
                     "nix-command"
                     "flakes"
                   ];
+                  nix.settings.substituters = lib.mkForce [ "https://${s3.bucket}" ];
+                  nix.settings.trusted-public-keys = [ cachePublicKey ];
 
                   # add the testpkg to the closure at buildtime. otherwise `nix sign/copy` will try to build or fetch it
                   environment.systemPackages = [ postbuildstepperTestpkg ];
@@ -197,7 +221,7 @@
                       level INFO
                     '';
                     globalConfig = ''
-                      auto_https off
+                      auto_https disable_certs
                     '';
 
                     virtualHosts.${s3.endpoint} = {
@@ -212,6 +236,28 @@
                         rewrite * /${s3.bucket}{uri}
                         reverse_proxy http://${config.services.minio.listenAddress}
                       '';
+                    };
+                    # mock the github API for the pullrequest query
+                    virtualHosts."${github.endpoint}" = {
+                      extraConfig =
+                        let
+                          root = pkgs.runCommand "fixture" { } ''
+                            set -x
+                            mkdir -p "$out/.$(dirname ${github.path})"
+                            cp "${self}/applications/postbuildstepper/fixtures/pull2410.json" "$out/.${github.path}"
+                          '';
+                        in
+                        ''
+                          tls ${github.endpointCert}/server.crt ${github.endpointCert}/server.key
+
+                          @authorized header "authorization" "Bearer ${github.testPat}"
+                          @unauthorized expression `!header({'authorization':'Bearer ${github.testPat}'}) || !header({'user-agent':'*'})`
+
+                          error @unauthorized "Unauthorized" 403
+
+                          root @authorized ${root}
+                          file_server @authorized
+                        '';
                     };
                   };
                 };
@@ -234,47 +280,52 @@
 
               machine.wait_for_unit("caddy.service")
 
-              with subtest("sign stores paths and push them to s3"):
-                machine.succeed("${pkgs.writeShellScript "prepare-minio" ''
-                  export PATH=${pkgs.minio-client}/bin:$PATH
+              machine.succeed("${pkgs.writeShellScript "prepare-minio" ''
+                export PATH=${pkgs.minio-client}/bin:$PATH
 
-                  set -xe
+                set -xe
 
-                  mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
-                  mc mb localhost/${s3.bucket}
+                mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
+                mc mb localhost/${s3.bucket}
 
-                  # create a non-admin user with write permissions
-                  mc admin user add localhost ${s3.userKey} ${s3.userSecret}
-                  mc admin policy attach localhost readwrite --user ${s3.userKey}
-                  mc alias set user "https://${s3.endpoint}" "${s3.userKey}" "${s3.userSecret}"
+                # create a non-admin user with write permissions
+                mc admin user add localhost ${s3.userKey} ${s3.userSecret}
+                mc admin policy attach localhost readwrite --user ${s3.userKey}
+                mc alias set user "https://${s3.endpoint}" "${s3.userKey}" "${s3.userSecret}"
 
-                  # allow anonymous access to the "cache"
-                  mc anonymous set --recursive download localhost/${s3.bucket}
+                # allow anonymous access to the "cache"
+                mc anonymous set --recursive download localhost/${s3.bucket}
 
-                  # this file is GET'ed by `nix copy`
-                  echo "StoreDir: /nix/store" > nix-cache-info
-                  mc cp nix-cache-info user/${s3.bucket}/nix-cache-info
-                  # mc cp nix-cache-info localhost/${s3.bucket}/nix-cache-info
+                # this file is GET'ed by `nix copy`
+                echo "StoreDir: /nix/store" > nix-cache-info
+                mc cp nix-cache-info user/${s3.bucket}/nix-cache-info
 
-                  for remote in \
-                      https://${s3.endpoint}/${s3.bucket}/nix-cache-info \
-                      https://${s3.bucket}/nix-cache-info \
-                      ; do
-                    diff --report-identical-files <(curl ''${remote}) nix-cache-info
-                  done
+                for remote in \
+                    https://${s3.endpoint}/${s3.bucket}/nix-cache-info \
+                    https://${s3.bucket}/nix-cache-info \
+                    ; do
+                  diff --report-identical-files <(curl ''${remote}) nix-cache-info
+                done
+              ''}", timeout = 10)
 
+              cacheCheckCmd = "nix copy --refresh --verbose --from https://${s3.bucket} --to ./store ${postbuildstepperTestpkg}"
+              tarballCheckCmdNumber = "grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPathNumber}"
+              tarballCheckCmdHeadref = "grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPathHeadRef}"
 
-                ''}", timeout = 10)
+              with subtest("true negative pre-run"):
+                machine.fail(cacheCheckCmd, timeout = 30)
+                machine.fail(tarballCheckCmdNumber, timeout = 30)
+                machine.fail(tarballCheckCmdHeadref, timeout = 30)
 
+              with subtest("run"):
                 machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
-                machine.succeed("nix copy --trusted-public-keys ${cachePublicKey} --from https://cache.holo.host --to ./store ${postbuildstepperTestpkg}", timeout = 30)
 
-              with subtest("filesystem probe for holo-nixpkgs-release tarballs"):
-                machine.fail("grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPath}", timeout = 30)
-                machine.succeed("${lib.getExe self'.checks.postbuildstepper-test-channel}", timeout = 30)
-                machine.succeed("grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPath}", timeout = 30)
+              with subtest("true positives post-run"):
+                machine.succeed(cacheCheckCmd, timeout = 30)
+                machine.succeed(tarballCheckCmdNumber, timeout = 30)
+                machine.succeed(tarballCheckCmdHeadref, timeout = 30)
 
-              # TODO(backlog): test the served HTTP endpoint for the tarball with nix-channel --add and nix-channel --update
+              # TODO(backlog): set up and test the served HTTPS endpoint for the tarball with nix-channel --add and nix-channel --update
             '';
           };
         };

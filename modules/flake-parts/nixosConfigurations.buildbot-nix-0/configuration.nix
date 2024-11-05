@@ -54,6 +54,7 @@
       # NOTE: for security reasons this secret is kept out of the public repo
       "cacheHoloHost2secret" = "/var/lib/secrets/cache.holo.host-2/secret";
       "awsSharedCredentialsFile" = config.sops.secrets.holo-host-aws-shared-credentials.path;
+      "githubUserAndPat" = config.sops.secrets.holo-host-github-environment-secrets.path;
     };
   };
 
@@ -322,6 +323,7 @@
             )
             // {
               PBS_CHANNELS_DIRECTORY = config.passthru.buildbot-nix.channelsDirectory;
+              SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [ "buildbot-nix-hydra-compat" ];
             };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
         }
