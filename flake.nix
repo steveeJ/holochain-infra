@@ -384,6 +384,7 @@
                   treefmtWrapper
 
                   pkgs.yq-go
+                  pkgs.jq
 
                   inputs'.nixos-anywhere.packages.default
 
