@@ -48,6 +48,7 @@
       topic = "holo-chain-buildbot-nix-0";
       channelsFqdn = "buildbot-nix-0-channels.${config.passthru.domain}";
       channelsDirectory = "/var/www/buildbot/nix-channels";
+      jobsetsDirectory = "/var/www/buildbot/nix-jobsets";
     };
 
     buildbot-secrets = {
@@ -199,12 +200,20 @@
   # it's made writable for nginx and buildbot-worker
   systemd.tmpfiles.rules = [
     "d ${config.passthru.buildbot-nix.channelsDirectory} 0755 buildbot-worker buildbot-worker - -"
+    "d ${config.passthru.buildbot-nix.jobsetsDirectory} 0755 buildbot-worker buildbot-worker - -"
   ];
   services.nginx.virtualHosts."${config.passthru.buildbot-nix.channelsFqdn}" = {
     enableACME = true;
     forceSSL = true;
     locations."/channel/custom/holo-nixpkgs/" = {
       alias = "${config.passthru.buildbot-nix.channelsDirectory}/";
+      extraConfig = ''
+        autoindex on;
+      '';
+    };
+
+    locations."/jobset/holo-nixpkgs/" = {
+      alias = "${config.passthru.buildbot-nix.jobsetsDirectory}/";
       extraConfig = ''
         autoindex on;
       '';
@@ -323,6 +332,7 @@
             )
             // {
               PBS_CHANNELS_DIRECTORY = config.passthru.buildbot-nix.channelsDirectory;
+              PBS_JOBSETS_DIRECTORY = config.passthru.buildbot-nix.jobsetsDirectory;
               SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [ "buildbot-nix-hydra-compat" ];
             };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
