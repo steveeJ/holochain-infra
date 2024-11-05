@@ -55,6 +55,7 @@ pub mod business {
     use core::time;
     use log::{debug, info, trace, warn};
     use reqwest::header::{AUTHORIZATION, USER_AGENT};
+    use serde_json::json;
     use std::{
         collections::{HashMap, HashSet},
         ffi::OsString,
@@ -67,6 +68,7 @@ pub mod business {
 
     // TODO(backlog): create a config map for these
     const CHANNELS_DIRECTORY_ENV_KEY: &str = "PBS_CHANNELS_DIRECTORY";
+    const CHANNELS_JOBSETS_ENV_KEY: &str = "PBS_JOBSETS_DIRECTORY";
     const HOLO_NIXPKGS_RELEASE_ATTR: &str = "x86_64-linux.holo-nixpkgs-release";
     /// Contains a comma separated list of source branches from which named channels will be created
     const SOURCE_BRANCH_CHANNELS_ENV_KEY: &str = "SOURCE_BRANCH_CHANNELS";
@@ -160,6 +162,10 @@ pub mod business {
 
                 _ => bail!("unsupported event: {raw}"),
             }
+        }
+
+        fn try_revision(&self) -> Result<&String> {
+            self.get("PROP_revision")
         }
 
         /// queries the github API to find the source branch of this pullrequest
@@ -424,6 +430,7 @@ pub mod business {
             }
 
             let pbs_channels_directory: &str = build_info.get(CHANNELS_DIRECTORY_ENV_KEY)?;
+            let pbs_jobsets_directory: &str = build_info.get(CHANNELS_JOBSETS_ENV_KEY)?;
 
             match build_info.try_event().await? {
                 BuildInfoEvent::PullRequest {
@@ -441,41 +448,94 @@ pub mod business {
                         "will create channels for these source branches: {source_branch_channels:#?}"
                     );
 
-                    let mut channel_dirs = vec![number];
+                    let mut channel_names = vec![&number];
                     if source_branch_channels.contains(source_branch.as_str()) {
-                        channel_dirs.push(source_branch);
+                        channel_names.push(&source_branch);
                     };
 
-                    for channel_dir in channel_dirs {
-                        // symlink the tarball to <base-path>/<channel-name>/holo-nixpkgs/nixexprs.tar.xz
-                        let link_output_dir = std::path::Path::new(pbs_channels_directory)
-                            .join(channel_dir)
-                            // TODO(backlog): read this from environment
-                            .join("holo-nixpkgs");
-                        // TODO(backlog): create config map for this
-                        let link_output_path = link_output_dir.join("nixexprs.tar.xz");
-                        let link_output_path_tmp = link_output_dir.join("nixexprs.tar.xz.tmp");
+                    for channel_name in channel_names {
+                        {
+                            // symlink the tarball to <base-path>/<channel-name>/holo-nixpkgs/nixexprs.tar.xz
+                            let tarball_link_output_dir =
+                                std::path::Path::new(pbs_channels_directory)
+                                    .join(channel_name)
+                                    // TODO(backlog): read this from environment
+                                    .join("holo-nixpkgs");
+                            // TODO(backlog): create config map for this
+                            let tarball_link_output_path =
+                                tarball_link_output_dir.join("nixexprs.tar.xz");
+                            let tarball_link_output_path_tmp =
+                                tarball_link_output_dir.join("nixexprs.tar.xz.tmp");
 
-                        std::fs::create_dir_all(&link_output_dir)
-                            .context(format!("creating to contain symlink {link_output_dir:#?}"))?;
+                            std::fs::create_dir_all(&tarball_link_output_dir).context(format!(
+                                "creating to contain symlink {tarball_link_output_dir:#?}"
+                            ))?;
 
-                        if std::fs::exists(&link_output_path_tmp).context(format!(
-                            "checking the existence of {link_output_path_tmp:#?}"
-                        ))? {
-                            std::fs::remove_file(&link_output_path_tmp)
-                                .context(format!("removing {link_output_path_tmp:#?}"))?;
+                            if std::fs::exists(&tarball_link_output_path_tmp).context(format!(
+                                "checking the existence of {tarball_link_output_path_tmp:#?}"
+                            ))? {
+                                std::fs::remove_file(&tarball_link_output_path_tmp).context(
+                                    format!("removing {tarball_link_output_path_tmp:#?}"),
+                                )?;
+                            }
+
+                            std::os::unix::fs::symlink(&tarball_path, &tarball_link_output_path_tmp).context(
+                                    format!(
+                                        "create symlink to {tarball_path:#?} at {tarball_link_output_path_tmp:#?}"
+                                    ),
+                                )?;
+                            std::fs::rename(&tarball_link_output_path_tmp, &tarball_link_output_path)
+                                .context(format!(
+                                "renaming {tarball_link_output_path_tmp:#?} to {tarball_link_output_path:#?}"
+                            ))?;
+
+                            info!(
+                                "created tarball symlink to {tarball_path:#?} at {tarball_link_output_path:#?}"
+                            );
                         }
 
-                        std::os::unix::fs::symlink(&tarball_path, &link_output_path_tmp).context(
-                            format!(
-                                "create symlink to {tarball_path:#?} at {link_output_path_tmp:#?}"
-                            ),
-                        )?;
-                        std::fs::rename(&link_output_path_tmp, &link_output_path).context(
-                            format!("renaming {link_output_path_tmp:#?} to {link_output_path:#?}"),
-                        )?;
+                        let latest_eval_json = json!(
+                            { "jobsetevalinputs": { "holo-nixpkgs": { "revision": build_info.try_revision()? } } }
+                        )
+                            .to_string() ;
 
-                        info!("created symlink to {tarball_path:#?} at {link_output_path:#?}");
+                        {
+                            /*
+                            reproduce the latest-eval necessary fields. informed by this curl command:
+
+                            $ curl -L -H Content-Type:application/json "https://hydra.holo.host/jobset/holo-nixpkgs/2410/latest-eval" | jq -r '.jobsetevalinputs | .holo-nixpkgs | .revision'
+                            71ab117ef134c645b61f2493ca5dfe06970158bc
+                            */
+
+                            let jobset_output_dir =
+                                std::path::Path::new(pbs_jobsets_directory).join(channel_name);
+
+                            let jobset_output_path = jobset_output_dir.join("latest-eval");
+                            let jobset_output_path_tmp = jobset_output_dir.join("latest-eval.tmp");
+
+                            std::fs::create_dir_all(&jobset_output_dir).context(format!(
+                                "creating to contain symlink {jobset_output_dir:#?}"
+                            ))?;
+
+                            if std::fs::exists(&jobset_output_path_tmp).context(format!(
+                                "checking the existence of {jobset_output_path_tmp:#?}"
+                            ))? {
+                                std::fs::remove_file(&jobset_output_path_tmp)
+                                    .context(format!("removing {jobset_output_path_tmp:#?}"))?;
+                            }
+
+                            std::fs::write(&jobset_output_path_tmp, &latest_eval_json).context(
+                                format!("write {latest_eval_json} to {jobset_output_path_tmp:#?}"),
+                            )?;
+
+                            std::fs::rename(&jobset_output_path_tmp, &jobset_output_path).context(
+                                format!(
+                                "renaming {jobset_output_path_tmp:#?} to {jobset_output_path:#?}"
+                            ),
+                            )?;
+
+                            info!("wrote '{latest_eval_json}' to {jobset_output_path:#?}");
+                        }
                     }
 
                     return Ok(());

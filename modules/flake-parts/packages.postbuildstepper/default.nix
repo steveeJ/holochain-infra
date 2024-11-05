@@ -124,11 +124,15 @@
             testPat = "github_testpat";
           };
 
-          pbsChannelDirectory = "/tmp/channels";
+          pbsChannelDirectory = "/tmp/hydra-compat/channels";
+          pbsJobsetsDirectory = "/tmp/hydra-compat/jobsets";
           tarballTestString = "${github.testPullReqestNumber} ${github.testPullReqestNumber}";
+          testRevision = "cfcc07f250cff8261d98fb652e1bab8b1fdc3509";
           pkgTarballPath = "tarballs/nixexprs.tar.xz";
-          serveTarballPathNumber = "${github.testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
-          serveTarballPathHeadRef = "${github.testPullReqestHeadRef}/holo-nixpkgs/nixexprs.tar.xz";
+          serveTarballPathNumber = "${pbsChannelDirectory}/${github.testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
+          serveTarballPathHeadRef = "${pbsChannelDirectory}/${github.testPullReqestHeadRef}/holo-nixpkgs/nixexprs.tar.xz";
+          serveJobsetsPathNumber = "${pbsJobsetsDirectory}/${github.testPullReqestNumber}/latest-eval";
+          serveJobsetsPathHeadRef = "${pbsJobsetsDirectory}/${github.testPullReqestHeadRef}/latest-eval";
 
           postbuildstepperTestpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
             mkdir -p $out/bin
@@ -153,6 +157,8 @@
 
             export PBS_CHANNELS_DIRECTORY="${pbsChannelDirectory}"
             mkdir -p $PBS_CHANNELS_DIRECTORY
+            export PBS_JOBSETS_DIRECTORY="${pbsJobsetsDirectory}"
+            mkdir -p $PBS_JOBSETS_DIRECTORY
 
             # TODO: DRY further
             export PROP_event="pull_request"
@@ -161,6 +167,7 @@
             export SECRET_githubUserAndPat="notoken=here
             NIX_GITHUB_PRIVATE_PAT=${github.testPat}"
             export SOURCE_BRANCH_CHANNELS="${github.testPullReqestHeadRef}";
+            export PROP_revision=${testRevision}
 
             export RUST_BACKTRACE=full
             export RUST_LOG=trace
@@ -202,7 +209,10 @@
                   nix.settings.trusted-public-keys = [ cachePublicKey ];
 
                   # add the testpkg to the closure at buildtime. otherwise `nix sign/copy` will try to build or fetch it
-                  environment.systemPackages = [ postbuildstepperTestpkg ];
+                  environment.systemPackages = [
+                    postbuildstepperTestpkg
+                    pkgs.jq
+                  ];
 
                   services.minio = {
                     enable = true;
@@ -309,13 +319,17 @@
               ''}", timeout = 10)
 
               cacheCheckCmd = "nix copy --refresh --verbose --from https://${s3.bucket} --to ./store ${postbuildstepperTestpkg}"
-              tarballCheckCmdNumber = "grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPathNumber}"
-              tarballCheckCmdHeadref = "grep '${tarballTestString}' ${pbsChannelDirectory}/${serveTarballPathHeadRef}"
+              tarballCheckCmdNumber = "grep '${tarballTestString}' ${serveTarballPathNumber}"
+              tarballCheckCmdHeadref = "grep '${tarballTestString}' ${serveTarballPathHeadRef}"
+              jobsetsCheckCmdNumber = """[[ ${testRevision} = $(jq -r '.jobsetevalinputs | ."holo-nixpkgs" | .revision' < ${serveJobsetsPathNumber}) ]]"""
+              jobsetsCheckCmdHeadref = """[[ ${testRevision} = $(jq -r '.jobsetevalinputs | ."holo-nixpkgs" | .revision' < ${serveJobsetsPathHeadRef}) ]]"""
 
               with subtest("true negative pre-run"):
                 machine.fail(cacheCheckCmd, timeout = 30)
                 machine.fail(tarballCheckCmdNumber, timeout = 30)
                 machine.fail(tarballCheckCmdHeadref, timeout = 30)
+                machine.fail(jobsetsCheckCmdNumber, timeout = 30)
+                machine.fail(jobsetsCheckCmdHeadref, timeout = 30)
 
               with subtest("run"):
                 machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
@@ -324,8 +338,11 @@
                 machine.succeed(cacheCheckCmd, timeout = 30)
                 machine.succeed(tarballCheckCmdNumber, timeout = 30)
                 machine.succeed(tarballCheckCmdHeadref, timeout = 30)
+                machine.succeed(jobsetsCheckCmdNumber, timeout = 30)
+                machine.succeed(jobsetsCheckCmdHeadref, timeout = 30)
 
               # TODO(backlog): set up and test the served HTTPS endpoint for the tarball with nix-channel --add and nix-channel --update
+              # TODO(backlog): set up and test the served HTTPS endpoint for the latest-eval with curl
             '';
           };
         };
