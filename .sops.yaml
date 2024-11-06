@@ -85,20 +85,20 @@ creation_rules:
         age:
           - *x64-linux-dev-01
           - *age_r-vdp
-  - path_regex: ^secrets/buildbot-nix-0/[^/]+$
-    key_groups:
-      - pgp:
-          - *steveej
-        age:
-          - *buildbot-nix-0
-          - *age_r-vdp
-  - path_regex: ^secrets/buildbot-nix-0/github-secrets.yaml+$
+  - path_regex: ^secrets/buildbot-nix-0/github-secrets.yaml$
     key_groups:
       - pgp:
           - *steveej
         age:
           - *buildbot-nix-0
           - *aarch64-linux-builder-0
+          - *age_r-vdp
+  - path_regex: ^secrets/buildbot-nix-0/[^/]+$
+    key_groups:
+      - pgp:
+          - *steveej
+        age:
+          - *buildbot-nix-0
           - *age_r-vdp
   - path_regex: ^secrets/nomad/.+$
     key_groups:
