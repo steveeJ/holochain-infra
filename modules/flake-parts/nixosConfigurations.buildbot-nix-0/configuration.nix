@@ -38,6 +38,20 @@
     domain = self.specialArgs.infraDomain;
     hostName = "buildbot-nix-0";
 
+    hydra = {
+      fqdn = "hydra.holo.host";
+
+      # First HoloPort/HoloPort+ batch points to Hydra-based Nix channel on this
+      # domain. This has to be left here forever for reverse- compatibility
+      # reasons.
+      legacyFqdn = "holoportbuild.holo.host";
+
+      channelsUrlPath = "/channel/custom/holo-nixpkgs/";
+      jobsetsUrlPath = "/jobset/holo-nixpkgs/";
+      channelsDirectory = "/var/www/buildbot/nix-channels";
+      jobsetsDirectory = "/var/www/buildbot/nix-jobsets";
+    };
+
     primaryIpv4 = "65.109.100.254";
     primaryIpv6 = "2a01:4f9:3080:25e7::1/64";
 
@@ -46,9 +60,6 @@
       appId = 1008744;
       oauthId = "Iv23liqmAiBw8ab9EF61";
       topic = "holo-chain-buildbot-nix-0";
-      channelsFqdn = "buildbot-nix-0-channels.${config.passthru.domain}";
-      channelsDirectory = "/var/www/buildbot/nix-channels";
-      jobsetsDirectory = "/var/www/buildbot/nix-jobsets";
     };
 
     buildbot-secrets = {
@@ -191,32 +202,48 @@
     443
   ];
 
-  services.nginx.virtualHosts."${config.passthru.buildbot-nix.appFqdn}" = {
-    enableACME = true;
-    forceSSL = true;
-  };
-
   # configure the nix-channels directory.
   # it's made writable for nginx and buildbot-worker
   systemd.tmpfiles.rules = [
-    "d ${config.passthru.buildbot-nix.channelsDirectory} 0755 buildbot-worker buildbot-worker - -"
-    "d ${config.passthru.buildbot-nix.jobsetsDirectory} 0755 buildbot-worker buildbot-worker - -"
+    "d ${config.passthru.hydra.channelsDirectory} 0755 buildbot-worker buildbot-worker - -"
+    "d ${config.passthru.hydra.jobsetsDirectory} 0755 buildbot-worker buildbot-worker - -"
   ];
-  services.nginx.virtualHosts."${config.passthru.buildbot-nix.channelsFqdn}" = {
+
+  services.nginx.virtualHosts."${config.passthru.buildbot-nix.appFqdn}" = {
     enableACME = true;
     forceSSL = true;
-    locations."/channel/custom/holo-nixpkgs/" = {
-      alias = "${config.passthru.buildbot-nix.channelsDirectory}/";
+    locations = {
+      "${config.passthru.hydra.channelsUrlPath}".proxyPass = "https://${config.passthru.hydra.fqdn}";
+      "${config.passthru.hydra.jobsetsUrlPath}".proxyPass = "https://${config.passthru.hydra.fqdn}";
+    };
+  };
+
+  # drop-in replacement for hydra
+  services.nginx.virtualHosts."${config.passthru.hydra.fqdn}" = {
+    enableACME = true;
+    forceSSL = true;
+
+    locations."${config.passthru.hydra.channelsUrlPath}" = {
+      alias = "${config.passthru.hydra.channelsDirectory}/";
       extraConfig = ''
         autoindex on;
       '';
     };
 
-    locations."/jobset/holo-nixpkgs/" = {
-      alias = "${config.passthru.buildbot-nix.jobsetsDirectory}/";
+    locations."${config.passthru.hydra.jobsetsUrlPath}" = {
+      alias = "${config.passthru.hydra.jobsetsDirectory}/";
       extraConfig = ''
         autoindex on;
       '';
+    };
+  };
+
+  services.nginx.virtualHosts."${config.passthru.hydra.legacyFqdn}" = {
+    enableACME = true;
+    forceSSL = true;
+    locations = {
+      "${config.passthru.hydra.channelsUrlPath}".proxyPass = "https://${config.passthru.hydra.fqdn}";
+      "${config.passthru.hydra.jobsetsUrlPath}".proxyPass = "https://${config.passthru.hydra.fqdn}";
     };
   };
 
@@ -331,8 +358,8 @@
               ) (builtins.attrNames config.passthru.buildbot-secrets)
             )
             // {
-              PBS_CHANNELS_DIRECTORY = config.passthru.buildbot-nix.channelsDirectory;
-              PBS_JOBSETS_DIRECTORY = config.passthru.buildbot-nix.jobsetsDirectory;
+              PBS_CHANNELS_DIRECTORY = config.passthru.hydra.channelsDirectory;
+              PBS_JOBSETS_DIRECTORY = config.passthru.hydra.jobsetsDirectory;
               SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [ "buildbot-nix-hydra-compat" ];
             };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
