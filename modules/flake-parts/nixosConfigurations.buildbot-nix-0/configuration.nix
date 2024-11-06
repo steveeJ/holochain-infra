@@ -16,6 +16,7 @@
     inputs.srvos.nixosModules.roles-nix-remote-builder
     self.nixosModules.holo-users
     self.nixosModules.nix-build-distributor
+    self.nixosModules.holo-host-nix-daemon-github-secrets
 
     inputs.sops-nix.nixosModules.sops
 
@@ -384,9 +385,5 @@
     "big-parallel"
   ];
 
-  sops.secrets.holo-host-github-environment-secrets = { };
   sops.secrets.holo-host-aws-shared-credentials = { };
-  systemd.services.nix-daemon.serviceConfig = {
-    EnvironmentFile = [ config.sops.secrets.holo-host-github-environment-secrets.path ];
-  };
 }
