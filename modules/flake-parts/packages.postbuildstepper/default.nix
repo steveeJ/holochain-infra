@@ -111,6 +111,7 @@
             repository = github.fixture.head.repo.html_url;
             testPullReqestNumber = builtins.toString github.fixture.number;
             testPullReqestHeadRef = github.fixture.head.ref;
+            testBranch = "develop";
             path = "/repos/${github.project}/pulls/${github.testPullReqestNumber}";
             endpoint = "api.github.com";
             uri = "https://${github.endpoint}${github.path}";
@@ -131,8 +132,10 @@
           pkgTarballPath = "tarballs/nixexprs.tar.xz";
           serveTarballPathNumber = "${pbsChannelDirectory}/${github.testPullReqestNumber}/holo-nixpkgs/nixexprs.tar.xz";
           serveTarballPathHeadRef = "${pbsChannelDirectory}/${github.testPullReqestHeadRef}/holo-nixpkgs/nixexprs.tar.xz";
+          serveTarballPathBranch = "${pbsChannelDirectory}/${github.testBranch}/holo-nixpkgs/nixexprs.tar.xz";
           serveJobsetsPathNumber = "${pbsJobsetsDirectory}/${github.testPullReqestNumber}/latest-eval";
           serveJobsetsPathHeadRef = "${pbsJobsetsDirectory}/${github.testPullReqestHeadRef}/latest-eval";
+          serveJobsetsPathBranch = "${pbsJobsetsDirectory}/${github.testBranch}/latest-eval";
 
           postbuildstepperTestpkg = pkgs.runCommand "postbuildstepper-testpkg" { } ''
             mkdir -p $out/bin
@@ -141,39 +144,39 @@
             mkdir -p $out/$(dirname ${pkgTarballPath})
             echo "${tarballTestString}" > $out/${pkgTarballPath}
           '';
+          mkPostbuildstepperTest =
+            { additionalExports }:
+            pkgs.writeShellScript "test" ''
+              set -x
+
+              export PROP_owners="['steveej']"
+              export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
+              export PROP_project="Holo-Host/holo-nixpkgs" \
+              export PROP_attr="x86_64-linux.holo-nixpkgs-release"
+              export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
+              export PROP_out_path="${postbuildstepperTestpkg}"
+              # this needs to be `cat`ed because the program expects this to contain the content of the file.
+              export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
+
+              export PBS_CHANNELS_DIRECTORY="${pbsChannelDirectory}"
+              mkdir -p $PBS_CHANNELS_DIRECTORY
+              export PBS_JOBSETS_DIRECTORY="${pbsJobsetsDirectory}"
+              mkdir -p $PBS_JOBSETS_DIRECTORY
+
+              export PROP_revision=${testRevision}
+
+              export SECRET_githubUserAndPat="notoken=here
+              NIX_GITHUB_PRIVATE_PAT=${github.testPat}"
+
+              ${additionalExports}
+
+              export RUST_BACKTRACE=full
+              export RUST_LOG=trace
+              exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
+            '';
+
         in
         lib.attrsets.optionalAttrs (pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64) {
-          postbuildstepper-test = pkgs.writeShellScriptBin "test" ''
-            set -x
-
-            export PROP_owners="['steveej']"
-            export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
-            export PROP_project="Holo-Host/holo-nixpkgs" \
-            export PROP_attr="x86_64-linux.holo-nixpkgs-release"
-            export SECRET_cacheHoloHost2secret="${cacheSecretKey}"
-            export PROP_out_path="${postbuildstepperTestpkg}"
-            # this needs to be `cat`ed because the program expects this to contain the content of the file.
-            export SECRET_awsSharedCredentialsFile="$(cat ${awsSharedCredentialsFile})"
-
-            export PBS_CHANNELS_DIRECTORY="${pbsChannelDirectory}"
-            mkdir -p $PBS_CHANNELS_DIRECTORY
-            export PBS_JOBSETS_DIRECTORY="${pbsJobsetsDirectory}"
-            mkdir -p $PBS_JOBSETS_DIRECTORY
-
-            # TODO: DRY further
-            export PROP_event="pull_request"
-            export PROP_pullrequesturl="https://github.com/Holo-Host/holo-nixpkgs/pull/${github.testPullReqestNumber}"
-            export PROP_basename="develop"
-            export SECRET_githubUserAndPat="notoken=here
-            NIX_GITHUB_PRIVATE_PAT=${github.testPat}"
-            export SOURCE_BRANCH_CHANNELS="${github.testPullReqestHeadRef}";
-            export PROP_revision=${testRevision}
-
-            export RUST_BACKTRACE=full
-            export RUST_LOG=trace
-            exec ${pkgs.lib.getExe' self.packages.${system}.postbuildstepper "postbuildstepper"}
-          '';
-
           tests-postbuildstepper-integration = inputs.nixpkgs.lib.nixos.runTest {
             name = "postbuildstepper";
 
@@ -319,27 +322,58 @@
               ''}", timeout = 10)
 
               cacheCheckCmd = "nix copy --refresh --verbose --from https://${s3.bucket} --to ./store ${postbuildstepperTestpkg}"
+
+              ### test pull_request event
               tarballCheckCmdNumber = "grep '${tarballTestString}' ${serveTarballPathNumber}"
               tarballCheckCmdHeadref = "grep '${tarballTestString}' ${serveTarballPathHeadRef}"
+              tarballCheckCmdBranch = "grep '${tarballTestString}' ${serveTarballPathBranch}"
               jobsetsCheckCmdNumber = """[[ ${testRevision} = $(jq -r '.jobsetevalinputs | ."holo-nixpkgs" | .revision' < ${serveJobsetsPathNumber}) ]]"""
               jobsetsCheckCmdHeadref = """[[ ${testRevision} = $(jq -r '.jobsetevalinputs | ."holo-nixpkgs" | .revision' < ${serveJobsetsPathHeadRef}) ]]"""
 
-              with subtest("true negative pre-run"):
+              with subtest("true negative pre-run pull_request"):
                 machine.fail(cacheCheckCmd, timeout = 30)
                 machine.fail(tarballCheckCmdNumber, timeout = 30)
                 machine.fail(tarballCheckCmdHeadref, timeout = 30)
                 machine.fail(jobsetsCheckCmdNumber, timeout = 30)
                 machine.fail(jobsetsCheckCmdHeadref, timeout = 30)
 
-              with subtest("run"):
-                machine.succeed("${lib.getExe self'.checks.postbuildstepper-test}", timeout = 30)
+              with subtest("simulate pull_request"):
+                machine.succeed("${
+                  mkPostbuildstepperTest {
+                    additionalExports = ''
+                      export PROP_event="pull_request"
+                      export PROP_pullrequesturl="https://github.com/Holo-Host/holo-nixpkgs/pull/${github.testPullReqestNumber}"
+                      export PROP_basename="develop"
+                      export SOURCE_BRANCH_CHANNELS="${github.testPullReqestHeadRef}";
+                    '';
+                  }
+                }", timeout = 30)
 
-              with subtest("true positives post-run"):
+              with subtest("true positives post-run pull_request"):
                 machine.succeed(cacheCheckCmd, timeout = 30)
                 machine.succeed(tarballCheckCmdNumber, timeout = 30)
                 machine.succeed(tarballCheckCmdHeadref, timeout = 30)
                 machine.succeed(jobsetsCheckCmdNumber, timeout = 30)
                 machine.succeed(jobsetsCheckCmdHeadref, timeout = 30)
+              ###
+
+              ### test push events
+              jobsetsCheckCmdBranch = """[[ ${testRevision} = $(jq -r '.jobsetevalinputs | ."holo-nixpkgs" | .revision' < ${serveJobsetsPathBranch}) ]]"""
+
+              with subtest("true negative pre-run push"):
+                machine.fail(jobsetsCheckCmdBranch, timeout = 30)
+              with subtest("simulate push"):
+                machine.succeed("${
+                  mkPostbuildstepperTest {
+                    additionalExports = ''
+                      export PROP_event="push"
+                      export PROP_branch="${github.testBranch}"
+                    '';
+                  }
+                }", timeout = 30)
+              with subtest("true positives post-run push"):
+                machine.succeed(jobsetsCheckCmdBranch, timeout = 30)
+              ###
 
               # TODO(backlog): set up and test the served HTTPS endpoint for the tarball with nix-channel --add and nix-channel --update
               # TODO(backlog): set up and test the served HTTPS endpoint for the latest-eval with curl
