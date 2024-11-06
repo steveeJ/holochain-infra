@@ -271,6 +271,7 @@ pub mod business {
             "github-actions",
             // admins
             "steveej",
+            "Stefan Junker <mail@stefanjunker.de>",
             "evangineer",
             // devs
             "ThetaSinner",
