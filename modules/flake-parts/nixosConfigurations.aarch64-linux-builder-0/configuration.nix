@@ -23,6 +23,8 @@
     ../../nixos/shared-linux.nix
 
     self.nixosModules.shared-monitoring-clients
+
+    self.nixosModules.holo-host-nix-daemon-github-secrets
   ];
 
   passthru = {
