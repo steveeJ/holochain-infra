@@ -360,7 +360,7 @@
             // {
               PBS_CHANNELS_DIRECTORY = config.passthru.hydra.channelsDirectory;
               PBS_JOBSETS_DIRECTORY = config.passthru.hydra.jobsetsDirectory;
-              SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [ "buildbot-nix-hydra-compat" ];
+              SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [ "scale-testing" ];
             };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
         }
