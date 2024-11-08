@@ -54,7 +54,8 @@
     };
 
     primaryIpv4 = "65.109.100.254";
-    primaryIpv6 = "2a01:4f9:3080:25e7::1/64";
+    primaryIpv6 = "2a01:4f9:3080:25e7::1";
+    primaryIpv6Suffix = "64";
 
     buildbot-nix = {
       appFqdn = "buildbot-nix-0.${config.passthru.domain}";
@@ -87,7 +88,7 @@
   boot.loader.efi.canTouchEfiVariables = false;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  systemd.network.networks."10-uplink".networkConfig.Address = config.passthru.primaryIpv6;
+  systemd.network.networks."10-uplink".networkConfig.Address = "${config.passthru.primaryIpv6}/${config.passthru.primaryIpv6Suffix}";
 
   disko.devices =
     let
