@@ -265,7 +265,6 @@
     admins = [
       "steveej"
       "evangineer"
-      "r-vdp"
     ];
     buildSystems = [
       "x86_64-linux"
