@@ -173,7 +173,7 @@
       monitoring.${config.passthru.infraDomain}.               CNAME   monitoring-0.${config.passthru.infraDomain}.
 
       buildbot-nix-0.${config.passthru.infraDomain}.           A       ${self.nixosConfigurations.buildbot-nix-0.config.passthru.primaryIpv4}
-      buildbot-nix-0-channels.${config.passthru.infraDomain}.  A       ${self.nixosConfigurations.buildbot-nix-0.config.passthru.primaryIpv4}
+      buildbot-nix-0.${config.passthru.infraDomain}.           AAAA    ${self.nixosConfigurations.buildbot-nix-0.config.passthru.primaryIpv6}
 
       linux-builder-01.${config.passthru.infraDomain}.         A       ${self.nixosConfigurations.linux-builder-01.config.passthru.primaryIpv4}
       linux-builder-2.${config.passthru.infraDomain}.          A       ${self.nixosConfigurations.linux-builder-2.config.passthru.primaryIpv4}
