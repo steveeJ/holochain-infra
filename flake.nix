@@ -455,8 +455,6 @@
 
           packages =
             {
-              # nomad = pkgs.nomad_1_6;
-
               nixos-anywhere = inputs'.nixos-anywhere.packages.default;
             }
             // (
