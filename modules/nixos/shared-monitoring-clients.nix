@@ -17,7 +17,7 @@
     openFirewall = false;
   };
 
-  imports = [ "${inputs.nixpkgsUnstable}/nixos/modules/services/monitoring/alloy.nix" ];
+  imports = [ ];
 
   sops.secrets = {
     prometheus_remote_write_password = {

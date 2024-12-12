@@ -7,7 +7,6 @@
 }:
 {
   imports = [
-    "${inputs.nixpkgsUnstable}/nixos/modules/services/monitoring/alloy.nix"
     (self + "/modules/nixos/shared-prometheus-exporters.nix")
   ];
 
