@@ -5,13 +5,12 @@ on:
   push:
     branches: [develop]
 
-
 jobs:
   os:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ]
+        os: []
     name: OS
     runs-on: ${{ matrix.os }}
     permissions:

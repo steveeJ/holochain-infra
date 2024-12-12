@@ -88,7 +88,8 @@
   boot.loader.efi.canTouchEfiVariables = false;
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  systemd.network.networks."10-uplink".networkConfig.Address = "${config.passthru.primaryIpv6}/${config.passthru.primaryIpv6Suffix}";
+  systemd.network.networks."10-uplink".networkConfig.Address =
+    "${config.passthru.primaryIpv6}/${config.passthru.primaryIpv6Suffix}";
 
   disko.devices =
     let

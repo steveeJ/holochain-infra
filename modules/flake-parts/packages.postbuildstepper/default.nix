@@ -280,25 +280,32 @@
               machine.start()
 
               machine.wait_for_unit("minio.service")
+              machine.wait_for_unit("caddy.service")
+
+              # NOTE(steveej)
+              # minio startup seems to go beyond it's service being active.
+              # hence, ensure that minio is actively the combination of caddy+minio are actively servicing requests.
+              machine.wait_until_succeeds("${pkgs.writeShellScript "wait-for-minio" ''
+                ${pkgs.minio-client}/bin/mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
+              ''}",
+                timeout = 10
+              )
+
               # uncomment this command get a minio trace log
-              # machine.execute(
-              #   ${pkgs.writeShellScript "trace-minio" ''
+              # machine.execute("${pkgs.writeShellScript "trace-minio" ''
                 #     export PATH=${pkgs.minio-client}/bin:$PATH
                 #     set -xe
                 #     # background trace logging for minio
                 #     mc admin trace --all localhost >&2 &
-                #   ''},
+                #   ''}",
               #   timeout = None
               # )
-
-              machine.wait_for_unit("caddy.service")
 
               machine.succeed("${pkgs.writeShellScript "prepare-minio" ''
                 export PATH=${pkgs.minio-client}/bin:$PATH
 
                 set -xe
 
-                mc alias set localhost "https://${s3.endpoint}" "${s3.adminKey}" "${s3.adminSecret}"
                 mc mb localhost/${s3.bucket}
 
                 # create a non-admin user with write permissions

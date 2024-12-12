@@ -16,8 +16,8 @@ jobs:
       id-token: "write"
       contents: "read"
     steps:
-    - uses: actions/checkout@v4
-    - uses: DeterminateSystems/nix-installer-action@main
-    - uses: DeterminateSystems/magic-nix-cache-action@main
-    - name: Run script
-      run: nix run .\#turn-readiness-check
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - name: Run script
+        run: nix run .\#turn-readiness-check
