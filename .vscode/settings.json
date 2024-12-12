@@ -1,6 +1,6 @@
 {
-    "nixEnvSelector.nixFile": "${workspaceRoot}/flake.nix",
-    "[nix]": {
-        "editor.defaultFormatter": null,
-    },
+  "nixEnvSelector.nixFile": "${workspaceRoot}/flake.nix",
+  "[nix]": {
+    "editor.defaultFormatter": null
+  }
 }

@@ -1,19 +1,19 @@
 {
-    "version": 3,
-    "checkpoint": {
-        "stack": "organization/holochain-infra/dev",
-        "latest": {
-            "manifest": {
-                "time": "2024-06-26T17:47:05.154786843+02:00",
-                "magic": "6cece4896dda855f1f8eeb278295600f55147c3a4c822170dd54c64d426a45f0",
-                "version": "v3.116.0"
-            },
-            "secrets_providers": {
-                "type": "passphrase",
-                "state": {
-                    "salt": "v1:Pqc+zMVi/jk=:v1:qrWBTYDIcH2WqUmg:1THU1HTwRjJH4PGbQ3nmjuSlU+amrg=="
-                }
-            }
+  "version": 3,
+  "checkpoint": {
+    "stack": "organization/holochain-infra/dev",
+    "latest": {
+      "manifest": {
+        "time": "2024-06-26T17:47:05.154786843+02:00",
+        "magic": "6cece4896dda855f1f8eeb278295600f55147c3a4c822170dd54c64d426a45f0",
+        "version": "v3.116.0"
+      },
+      "secrets_providers": {
+        "type": "passphrase",
+        "state": {
+          "salt": "v1:Pqc+zMVi/jk=:v1:qrWBTYDIcH2WqUmg:1THU1HTwRjJH4PGbQ3nmjuSlU+amrg=="
         }
+      }
     }
+  }
 }
