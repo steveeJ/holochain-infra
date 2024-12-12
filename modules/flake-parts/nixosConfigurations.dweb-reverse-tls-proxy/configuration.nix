@@ -335,8 +335,9 @@
     group = config.users.groups.nomad.name;
   };
 
+  # TODO: refactor this into a nomad-server module
   services.nomad = {
-    enable = true;
+    enable = false;
     package = pkgs.nomad_1_6;
     enableDocker = false;
     dropPrivileges = false;
