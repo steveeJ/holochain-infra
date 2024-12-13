@@ -46,6 +46,7 @@ in
 
   config = lib.mkIf cfg.enable {
     services.github-runners = lib.genAttrs mkList (_: {
+      enable = true;
       replace = true;
       ephemeral = true;
       inherit package;
