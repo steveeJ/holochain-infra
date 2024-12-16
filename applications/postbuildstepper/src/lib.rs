@@ -321,6 +321,8 @@ pub mod business {
             ),
         ];
 
+        let org = org.to_lowercase();
+
         let mut trusted_owners =
             HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(|s| s.to_lowercase()));
         trusted_owners.extend(
@@ -332,13 +334,13 @@ pub mod business {
                     )
                 },
             ))
-            .get(org)
+            .get(&org)
             .cloned()
             .unwrap_or_default(),
         );
         let owner_is_trusted = owners.is_subset(&trusted_owners);
         if !owner_is_trusted {
-            bail!("{owners:?} are *NOT* trusted!");
+            bail!("{owners:?} are *NOT* among trusted users for {org}: {trusted_owners:?}");
         }
         info!("owners {owners:?} are trusted! proceeding.");
 
