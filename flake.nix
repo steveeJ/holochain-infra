@@ -73,6 +73,11 @@
       flake = false;
     };
 
+    keys_cdunster = {
+      url = "https://github.com/cdunster.keys";
+      flake = false;
+    };
+
     # hash mismatch 2024/02/29
     # keys_maackle = {
     #   url = "https://github.com/maackle.keys";
