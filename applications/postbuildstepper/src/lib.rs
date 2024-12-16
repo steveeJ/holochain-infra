@@ -297,7 +297,7 @@ pub mod business {
             "evangineer",
             // devs
             "ThetaSinner",
-            "cduster",
+            "cdunster",
             "zippy",
             "JettTech",
             "mattgeddes",
