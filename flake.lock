@@ -842,7 +842,7 @@
     "keys_jost-s": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-B3Er8Ek9wzun9ziCWw2GmFlfOJrzCPqBRai2p6F2kjU=",
+        "narHash": "sha256-JNZErBxmtzjfIYaPE2qD0YWOwI8yZFljSL8uQeReneo=",
         "type": "file",
         "url": "https://github.com/jost-s.keys"
       },
