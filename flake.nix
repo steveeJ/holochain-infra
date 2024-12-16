@@ -67,10 +67,12 @@
       url = "https://github.com/steveej.keys";
       flake = false;
     };
-    keys_jost-s = {
-      url = "https://github.com/jost-s.keys";
-      flake = false;
-    };
+
+    # hash mismatch 2024/12/16
+    # keys_jost-s = {
+    #   url = "https://github.com/jost-s.keys";
+    #   flake = false;
+    # };
 
     # hash mismatch 2024/02/29
     # keys_maackle = {

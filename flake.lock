@@ -796,18 +796,6 @@
         "url": "https://github.com/artbrock.keys"
       }
     },
-    "keys_jost-s": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-B3Er8Ek9wzun9ziCWw2GmFlfOJrzCPqBRai2p6F2kjU=",
-        "type": "file",
-        "url": "https://github.com/jost-s.keys"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://github.com/jost-s.keys"
-      }
-    },
     "keys_r-vdp": {
       "flake": false,
       "locked": {
@@ -1442,7 +1430,6 @@
         "holochain-versions": "holochain-versions",
         "home-manager": "home-manager",
         "keys_artbrock": "keys_artbrock",
-        "keys_jost-s": "keys_jost-s",
         "keys_r-vdp": "keys_r-vdp",
         "keys_steveej": "keys_steveej",
         "keys_thetasinner": "keys_thetasinner",
