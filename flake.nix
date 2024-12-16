@@ -67,8 +67,14 @@
       url = "https://github.com/steveej.keys";
       flake = false;
     };
+
     keys_jost-s = {
       url = "https://github.com/jost-s.keys";
+      flake = false;
+    };
+
+    keys_cdunster = {
+      url = "https://github.com/cdunster.keys";
       flake = false;
     };
 

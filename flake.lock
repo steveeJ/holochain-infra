@@ -839,10 +839,22 @@
         "url": "https://github.com/artbrock.keys"
       }
     },
+    "keys_cdunster": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-wxcx/D4RkGsmmEg9ktriHR/PZO7jFFQv1ROg5/+s0VE=",
+        "type": "file",
+        "url": "https://github.com/cdunster.keys"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/cdunster.keys"
+      }
+    },
     "keys_jost-s": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-B3Er8Ek9wzun9ziCWw2GmFlfOJrzCPqBRai2p6F2kjU=",
+        "narHash": "sha256-JNZErBxmtzjfIYaPE2qD0YWOwI8yZFljSL8uQeReneo=",
         "type": "file",
         "url": "https://github.com/jost-s.keys"
       },
@@ -1467,6 +1479,7 @@
         "holochain-versions": "holochain-versions",
         "home-manager": "home-manager",
         "keys_artbrock": "keys_artbrock",
+        "keys_cdunster": "keys_cdunster",
         "keys_jost-s": "keys_jost-s",
         "keys_r-vdp": "keys_r-vdp",
         "keys_steveej": "keys_steveej",
