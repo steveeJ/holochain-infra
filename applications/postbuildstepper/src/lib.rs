@@ -57,7 +57,6 @@ pub mod business {
     use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
-        char::ToLowercase,
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
