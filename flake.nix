@@ -170,7 +170,7 @@
     };
 
     holoNixpkgs = {
-      url = "https://hydra.holo.host/channel/custom/holo-nixpkgs/2112/holo-nixpkgs/nixexprs.tar.xz";
+      url = "https://hydra.holo.host/channel/custom/holo-nixpkgs/develop/holo-nixpkgs/nixexprs.tar.xz";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-utils.follows = "flake-utils";
