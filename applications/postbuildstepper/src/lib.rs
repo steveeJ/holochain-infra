@@ -54,7 +54,7 @@ pub mod business {
     use anyhow::{anyhow, bail, Context, Result};
     use core::time;
     use log::{debug, info, trace, warn};
-    use reqwest::header::{AUTHORIZATION, USER_AGENT};
+    use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
         collections::{HashMap, HashSet},
@@ -285,30 +285,62 @@ pub mod business {
         Github,
     }
 
-    /// Verifies that the build current owners are trusted.
+    /// Verifies that the build current owners are trusted. All values are converted to lowercase before comparing.
     // FIXME: make trusted owners configurable
-    pub fn check_owners(owners: HashSet<String>) -> anyhow::Result<()> {
+    pub fn check_owners(owners: HashSet<String>, org: &str, _repo: &str) -> anyhow::Result<()> {
         const TRUSTED_OWNERS: &[&str] = &[
             // bots
             "github-actions",
-            // admins
-            "steveej",
-            "Stefan Junker <mail@stefanjunker.de>",
-            "evangineer",
-            // devs
-            "ThetaSinner",
-            "cdunster",
-            "zippy",
-            "JettTech",
-            "mattgeddes",
-            "zeeshan595",
-            "zo-el",
         ];
-        let trusted_owners =
-            HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(ToString::to_string));
+
+        const TRUSTED_OWNERS_PER_ORG: &[(&str, &[&str])] = &[
+            (
+                "holochain",
+                &[
+                    // admins
+                    "steveej",
+                    "Stefan Junker <mail@stefanjunker.de>",
+                    "evangineer",
+                    // devs
+                    "ThetaSinner",
+                    "cdunster",
+                    "zippy",
+                ],
+            ),
+            (
+                "holo-host",
+                &[
+                    "steveej",
+                    "Stefan Junker <mail@stefanjunker.de>",
+                    "evangineer",
+                    "JettTech",
+                    "mattgeddes",
+                    "zeeshan595",
+                    "mattgeddes",
+                ],
+            ),
+        ];
+
+        let org = org.to_lowercase();
+
+        let mut trusted_owners =
+            HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(|s| s.to_lowercase()));
+        trusted_owners.extend(
+            HashMap::<String, HashSet<String>>::from_iter(TRUSTED_OWNERS_PER_ORG.iter().map(
+                |(k, v)| {
+                    (
+                        k.to_lowercase(),
+                        HashSet::from_iter(v.iter().map(|s| s.to_lowercase())),
+                    )
+                },
+            ))
+            .get(&org)
+            .cloned()
+            .unwrap_or_default(),
+        );
         let owner_is_trusted = owners.is_subset(&trusted_owners);
         if !owner_is_trusted {
-            bail!("{owners:?} are *NOT* trusted!");
+            bail!("{owners:?} are *NOT* among trusted users for {org}: {trusted_owners:?}");
         }
         info!("owners {owners:?} are trusted! proceeding.");
 

@@ -18,7 +18,9 @@ async fn main() -> anyhow::Result<()> {
 
     let build_info = business::BuildInfo::from_env();
 
-    business::check_owners(build_info.try_owners()?)?;
+    let (org, repo) = build_info.try_org_repo()?;
+
+    business::check_owners(build_info.try_owners()?, org, repo)?;
 
     let SigningAndCopyInfo {
         signing_key_file,
