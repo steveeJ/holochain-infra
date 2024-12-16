@@ -183,8 +183,6 @@
       };
     };
 
-    nixpkgsPulumi.url = "github:steveej-forks/nixpkgs/pulumi-version-bump";
-
     nixos-vscode-server = {
       url = "github:nix-community/nixos-vscode-server";
       inputs = {
@@ -304,7 +302,6 @@
               nomadCaCert = ./secrets/nomad/admin/nomad-agent-ca.pem;
               nomadClientCert = ./secrets/nomad/cli/global-cli-nomad.pem;
 
-              pkgsPulumi = inputs'.nixpkgsPulumi.legacyPackages;
               cranePkgs = inputs.craneNixpkgs.legacyPackages.${system};
               craneLib = (inputs.crane.mkLib cranePkgs).overrideToolchain (
                 p:
@@ -430,13 +427,8 @@
                   pkgs.minio-client
 
                   pkgs.jq
-                  pkgsPulumi.pulumictl
-                  (pkgsPulumi.pulumi.withPackages (
-                    pulumiPackages: with pulumiPackages; [
-                      pulumi-language-go
-                      pulumi-command
-                    ]
-                  ))
+                  pkgs.pulumictl
+                  pkgs.pulumi-bin
                   pkgs.go_1_23
                 ]
                 ++ (

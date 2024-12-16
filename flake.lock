@@ -1342,22 +1342,6 @@
         "type": "github"
       }
     },
-    "nixpkgsPulumi": {
-      "locked": {
-        "lastModified": 1715674170,
-        "narHash": "sha256-Z9UdViH9/Z2JtSG6dinxPgJaWLilGJEYHgoshRf93c8=",
-        "owner": "steveej-forks",
-        "repo": "nixpkgs",
-        "rev": "e18ac83f535c659e34ae49c27e8babeca1f0f202",
-        "type": "github"
-      },
-      "original": {
-        "owner": "steveej-forks",
-        "ref": "pulumi-version-bump",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "nixpkgsUnstable": {
       "locked": {
         "lastModified": 1727802920,
@@ -1478,7 +1462,6 @@
         "nixpkgsNix": [
           "nixpkgs-24-11"
         ],
-        "nixpkgsPulumi": "nixpkgsPulumi",
         "nixpkgsUnstable": "nixpkgsUnstable",
         "pre-commit-hooks": "pre-commit-hooks",
         "rust-overlay": "rust-overlay",
