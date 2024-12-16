@@ -57,6 +57,7 @@ pub mod business {
     use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
+        char::ToLowercase,
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
@@ -321,23 +322,22 @@ pub mod business {
             ),
         ];
 
-        let mut trusted_owners = HashSet::<&&str>::from_iter(TRUSTED_OWNERS.iter());
+        let mut trusted_owners =
+            HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(|s| s.to_lowercase()));
         trusted_owners.extend(
-            HashMap::<&str, HashSet<&&str>>::from_iter(
-                TRUSTED_OWNERS_PER_ORG
-                    .iter()
-                    .map(|(k, v)| (*k, HashSet::from_iter(v.iter()))),
-            )
+            HashMap::<String, HashSet<String>>::from_iter(TRUSTED_OWNERS_PER_ORG.iter().map(
+                |(k, v)| {
+                    (
+                        k.to_lowercase(),
+                        HashSet::from_iter(v.iter().map(|s| s.to_lowercase())),
+                    )
+                },
+            ))
             .get(org)
             .cloned()
             .unwrap_or_default(),
         );
-        let owner_is_trusted = owners.is_subset(
-            &trusted_owners
-                .into_iter()
-                .map(ToString::to_string)
-                .collect(),
-        );
+        let owner_is_trusted = owners.is_subset(&trusted_owners);
         if !owner_is_trusted {
             bail!("{owners:?} are *NOT* trusted!");
         }
