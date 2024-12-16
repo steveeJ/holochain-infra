@@ -285,7 +285,7 @@ pub mod business {
         Github,
     }
 
-    /// Verifies that the build current owners are trusted.
+    /// Verifies that the build current owners are trusted. All values are converted to lowercase before comparing.
     // FIXME: make trusted owners configurable
     pub fn check_owners(owners: HashSet<String>, org: &str, _repo: &str) -> anyhow::Result<()> {
         const TRUSTED_OWNERS: &[&str] = &[
