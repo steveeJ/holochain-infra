@@ -590,6 +590,23 @@
 
           config = {
             containers.nomadServer = {
+              privateNetwork = true;
+              hostAddress = "10.250.0.1";
+              localAddress = "10.250.0.2";
+
+              forwardPorts = [
+                {
+                  containerPort = 4646;
+                  hostPort = 4646;
+                  protocol = "tcp";
+                }
+                {
+                  containerPort = 4647;
+                  hostPort = 4647;
+                  protocol = "tcp";
+                }
+              ];
+
               config =
                 { ... }:
                 {
@@ -606,6 +623,11 @@
                       };
                     };
                   };
+
+                  networking.firewall.allowedTCPPorts = [
+                    4646
+                    4647
+                  ];
                 };
             };
           };
@@ -615,6 +637,10 @@
 
           config = {
             containers.nomadClient = {
+              privateNetwork = true;
+              hostAddress = "10.250.0.1";
+              localAddress = "10.250.0.3";
+
               config =
                 { ... }:
                 {
@@ -629,6 +655,7 @@
                     settings = {
                       client = {
                         enabled = true;
+                        servers = [ "10.250.0.1" ];
                       };
                     };
                   };
