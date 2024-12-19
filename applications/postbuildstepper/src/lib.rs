@@ -57,6 +57,7 @@ pub mod business {
     use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
+        char::ToLowercase,
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
@@ -285,7 +286,7 @@ pub mod business {
         Github,
     }
 
-    /// Verifies that the build current owners are trusted. All values are converted to lowercase before comparing.
+    /// Verifies that the build current owners are trusted. Checks are case-insensitive.
     // FIXME: make trusted owners configurable
     pub fn check_owners(owners: HashSet<String>, org: &str, _repo: &str) -> anyhow::Result<()> {
         const TRUSTED_OWNERS: &[&str] = &[
@@ -338,7 +339,11 @@ pub mod business {
             .cloned()
             .unwrap_or_default(),
         );
-        let owner_is_trusted = owners.is_subset(&trusted_owners);
+        let owner_is_trusted = owners
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect::<HashSet<_>>()
+            .is_subset(&trusted_owners);
         if !owner_is_trusted {
             bail!("{owners:?} are *NOT* among trusted users for {org}: {trusted_owners:?}");
         }

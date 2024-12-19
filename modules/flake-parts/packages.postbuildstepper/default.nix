@@ -149,7 +149,7 @@
             pkgs.writeShellScript "test" ''
               set -x
 
-              export PROP_owners="['steveej']"
+              export PROP_owners="['steveeJ']"
               export PROP_repository="https://github.com/Holo-Host/holo-nixpkgs"
               export PROP_project="Holo-Host/holo-nixpkgs" \
               export PROP_attr="x86_64-linux.holo-nixpkgs-release"
