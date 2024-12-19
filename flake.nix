@@ -377,10 +377,6 @@
               # Automatically inherit any build inputs from `my-crate`
               inputsFrom = [
                 devshell
-                (self'.packages.postbuildstepper.override {
-                  inherit craneLib;
-                  stdenv = (cranePkgs.stdenvAdapters.useMoldLinker cranePkgs.stdenv);
-                })
               ];
 
               # Extra inputs (only used for interactive development)
