@@ -57,7 +57,6 @@ pub mod business {
     use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
-        char::ToLowercase,
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
@@ -508,17 +507,22 @@ pub mod business {
                     let source_branch_channels = HashSet::<&str>::from_iter(
                         build_info.get(SOURCE_BRANCH_CHANNELS_ENV_KEY)?.split(","),
                     );
-                    debug!("will create channels for these source branches: {source_branch_channels:#?}");
-                    let mut channel_names = vec![number];
+
+                    debug!("configured PR source branches for channel creation: {source_branch_channels:#?}");
+
                     if source_branch_channels.contains(source_branch.as_str()) {
-                        channel_names.push(source_branch);
-                    };
-                    Some(channel_names)
+                        // also include the PR number as a channel name
+                        Some(vec![number, source_branch])
+                    } else {
+                        None
+                    }
                 }
                 BuildInfoEvent::Push {
                     destination_branch, ..
                 } => Some(vec![destination_branch]),
             };
+
+            debug!("channel names for this build: {maybe_channel_names:#?}");
 
             if let Some(channel_names) = &maybe_channel_names {
                 let revision = build_info.try_revision()?;
