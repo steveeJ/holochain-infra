@@ -630,4 +630,89 @@ pub mod business {
 
         Ok(())
     }
+
+    #[cfg(test)]
+    mod tests {
+        use test_log::test;
+
+        use std::{collections::HashMap, fs::File, io::Write, path::Path};
+
+        use tempfile::tempdir;
+
+        use crate::business::{BuildInfo, CHANNELS_DIRECTORY_ENV_KEY, CHANNELS_JOBSETS_ENV_KEY};
+
+        use super::process_holo_nixpkgs_release;
+
+        fn recurse_and_print<T: IntoIterator<Item = Result<std::fs::DirEntry, std::io::Error>>>(
+            entries: T,
+            seen: &mut std::collections::HashSet<std::path::PathBuf>,
+        ) {
+            for entry in entries {
+                let entry = entry.unwrap();
+                let entry_path = entry.path();
+                let file_type = entry.file_type().unwrap();
+                log::debug!("entry: {entry:#?}");
+                if file_type.is_dir() && !seen.insert(entry_path.clone()) {
+                    recurse_and_print(std::fs::read_dir(entry_path).unwrap(), seen);
+                }
+            }
+        }
+
+        #[test(tokio::test)]
+        async fn test_process_holo_nixpkgs_release() {
+            let mk_buildinfo = |temppath: &Path, source_branch_channels| {
+                BuildInfo(HashMap::from_iter(
+                    [
+                        // TODO: extract some of these into consts that are shared with the code
+                        ("PROP_project", "Holo-Host/holo-nixpkgs"),
+                        ("PROP_attr", "x86_64-linux.holo-nixpkgs-release"),
+                        ("PROP_out_path", temppath.to_str().unwrap()),
+                        ("PROP_event", "pull_request"),
+                        ("PROP_pullrequesturl", "/1"),
+                        ("OVERRIDE_SOURCE_BRANCH", "one"),
+                        ("SOURCE_BRANCH_CHANNELS", source_branch_channels),
+                        ("PROP_revision", "1231"),
+                        (
+                            CHANNELS_DIRECTORY_ENV_KEY,
+                            temppath.join("channels").to_str().unwrap(),
+                        ),
+                        (
+                            CHANNELS_JOBSETS_ENV_KEY,
+                            temppath.join("jobsets").to_str().unwrap(),
+                        ),
+                    ]
+                    .map(|(k, v)| (k.to_string(), v.to_string())),
+                ))
+            };
+
+            for (source_branch_channels, expected) in [
+                ("", None),
+                ("one", Some(vec!["1".to_string(), "one".to_string()])),
+            ] {
+                let tempdir = tempdir().unwrap();
+
+                let out_path = tempdir.path().join("tarballs/nixexprs.tar.xz");
+                std::fs::create_dir_all(out_path.parent().unwrap()).unwrap();
+                let mut out_path_file = File::create_new(&out_path).unwrap();
+                out_path_file
+                    .write_all("not a real archive".as_bytes())
+                    .unwrap();
+
+                let maybe_channel_names = process_holo_nixpkgs_release(mk_buildinfo(
+                    tempdir.path(),
+                    source_branch_channels,
+                ))
+                .await
+                .unwrap();
+
+                assert_eq!(maybe_channel_names, expected);
+
+                // for debugging purposes
+                recurse_and_print(
+                    std::fs::read_dir(tempdir.path()).unwrap(),
+                    &mut Default::default(),
+                );
+            }
+        }
+    }
 }

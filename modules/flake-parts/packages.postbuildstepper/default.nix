@@ -344,6 +344,24 @@
                 machine.fail(jobsetsCheckCmdNumber, timeout = 30)
                 machine.fail(jobsetsCheckCmdHeadref, timeout = 30)
 
+              with subtest("simulate pull_request with empty source branch channels"):
+                machine.succeed("${
+                  mkPostbuildstepperTest {
+                    additionalExports = ''
+                      export PROP_event="pull_request"
+                      export PROP_pullrequesturl="https://github.com/Holo-Host/holo-nixpkgs/pull/${github.testPullReqestNumber}"
+                      export PROP_basename="develop"
+                      export SOURCE_BRANCH_CHANNELS="";
+                    '';
+                  }
+                }", timeout = 30)
+
+              with subtest("ensure there's no channel artifact after the PR"):
+                machine.fail(tarballCheckCmdNumber, timeout = 30)
+                machine.fail(tarballCheckCmdHeadref, timeout = 30)
+                machine.fail(jobsetsCheckCmdNumber, timeout = 30)
+                machine.fail(jobsetsCheckCmdHeadref, timeout = 30)
+
               with subtest("simulate pull_request"):
                 machine.succeed("${
                   mkPostbuildstepperTest {
