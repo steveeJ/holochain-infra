@@ -144,15 +144,18 @@ pub mod business {
                         .ok_or(anyhow!("couldn't find '/' in {url}"))?
                         .1
                         .to_string();
-                    let (forge, source_branch) = if url.starts_with("https://github.com") {
-                        let forge = Forge::Github;
-                        let source_branch =
-                            self.pullrequest_get_source_branch_github(&number).await?;
+                    let (forge, source_branch) =
+                        if let Ok(override_source_branch) = self.get("OVERRIDE_SOURCE_BRANCH") {
+                            (Forge::Mock, override_source_branch.clone())
+                        } else if url.starts_with("https://github.com") {
+                            let forge = Forge::Github;
+                            let source_branch =
+                                self.pullrequest_get_source_branch_github(&number).await?;
 
-                        (forge, source_branch)
-                    } else {
-                        bail!("unknown forgeo with url: {url}");
-                    };
+                            (forge, source_branch)
+                        } else {
+                            bail!("unknown forge with url: {url}");
+                        };
 
                     Ok(BuildInfoEvent::PullRequest {
                         number,
@@ -165,7 +168,7 @@ pub mod business {
                     let forge = if repository.starts_with("https://github.com") {
                         Forge::Github
                     } else {
-                        bail!("unknown forgeo with repository: {repository}");
+                        bail!("unknown forge with repository: {repository}");
                     };
                     let destination_branch = self.try_branch()?.to_string();
 
@@ -284,6 +287,7 @@ pub mod business {
     #[derive(Debug)]
     pub enum Forge {
         Github,
+        Mock,
     }
 
     /// Verifies that the build current owners are trusted. Checks are case-insensitive.
@@ -479,7 +483,9 @@ pub mod business {
         Ok(conclusion)
     }
 
-    pub async fn process_holo_nixpkgs_release(build_info: BuildInfo) -> Result<(), anyhow::Error> {
+    pub async fn process_holo_nixpkgs_release(
+        build_info: BuildInfo,
+    ) -> Result<Option<Vec<String>>, anyhow::Error> {
         if build_info.try_org_repo()? == ("Holo-Host", "holo-nixpkgs")
             && build_info.try_attr()? == HOLO_NIXPKGS_RELEASE_ATTR
         {
@@ -493,7 +499,7 @@ pub mod business {
             let pbs_channels_directory: &str = build_info.get(CHANNELS_DIRECTORY_ENV_KEY)?;
             let pbs_jobsets_directory: &str = build_info.get(CHANNELS_JOBSETS_ENV_KEY)?;
 
-            let channel_names = match build_info.try_event().await? {
+            let maybe_channel_names = match build_info.try_event().await? {
                 BuildInfoEvent::PullRequest {
                     number,
                     source_branch,
@@ -507,25 +513,29 @@ pub mod business {
                     if source_branch_channels.contains(source_branch.as_str()) {
                         channel_names.push(source_branch);
                     };
-                    channel_names
+                    Some(channel_names)
                 }
                 BuildInfoEvent::Push {
                     destination_branch, ..
-                } => vec![destination_branch],
+                } => Some(vec![destination_branch]),
             };
 
-            let revision = build_info.try_revision()?;
+            if let Some(channel_names) = &maybe_channel_names {
+                let revision = build_info.try_revision()?;
 
-            create_channel_artifacts(
-                revision,
-                channel_names.as_slice(),
-                pbs_channels_directory,
-                tarball_path,
-                pbs_jobsets_directory,
-            )?;
+                create_channel_artifacts(
+                    revision,
+                    channel_names.as_slice(),
+                    pbs_channels_directory,
+                    tarball_path,
+                    pbs_jobsets_directory,
+                )?;
+            }
+
+            Ok(maybe_channel_names)
+        } else {
+            Ok(None)
         }
-
-        Ok(())
     }
 
     fn create_channel_artifacts(
