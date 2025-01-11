@@ -297,32 +297,42 @@ pub mod business {
             "github-actions",
         ];
 
-        const TRUSTED_OWNERS_PER_ORG: &[(&str, &[&str])] = &[
+        const STEVEEJ: &[&str] = &[
+            "steveej",
+            "Stefan Junker <mail@stefanjunker.de>",
+            "Stefan Junker <1181362+steveej@users.noreply.github.com>",
+        ];
+
+        let trusted_owners_per_org: &[(&str, &[&str])] = &[
             (
                 "holochain",
                 &[
-                    // admins
-                    "steveej",
-                    "Stefan Junker <mail@stefanjunker.de>",
-                    "evangineer",
-                    // devs
-                    "ThetaSinner",
-                    "cdunster",
-                    "zippy",
-                ],
+                    STEVEEJ,
+                    &[
+                        // admins
+                        "evangineer",
+                        // devs
+                        "ThetaSinner",
+                        "cdunster",
+                        "zippy",
+                    ],
+                ]
+                .concat(),
             ),
             (
                 "holo-host",
                 &[
-                    "steveej",
-                    "Stefan Junker <mail@stefanjunker.de>",
-                    "evangineer",
-                    "JettTech",
-                    "mattgeddes",
-                    "zeeshan595",
-                    "mattgeddes",
-                    "alastairong1",
-                ],
+                    STEVEEJ,
+                    &[
+                        "evangineer",
+                        "JettTech",
+                        "mattgeddes",
+                        "zeeshan595",
+                        "mattgeddes",
+                        "alastairong1",
+                    ],
+                ]
+                .concat(),
             ),
         ];
 
@@ -331,7 +341,7 @@ pub mod business {
         let mut trusted_owners =
             HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(|s| s.to_lowercase()));
         trusted_owners.extend(
-            HashMap::<String, HashSet<String>>::from_iter(TRUSTED_OWNERS_PER_ORG.iter().map(
+            HashMap::<String, HashSet<String>>::from_iter(trusted_owners_per_org.iter().map(
                 |(k, v)| {
                     (
                         k.to_lowercase(),
