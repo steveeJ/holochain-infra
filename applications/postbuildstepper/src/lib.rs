@@ -57,7 +57,6 @@ pub mod business {
     use reqwest::header::USER_AGENT;
     use serde_json::json;
     use std::{
-        char::ToLowercase,
         collections::{HashMap, HashSet},
         ffi::OsString,
         io::Write,
@@ -144,15 +143,18 @@ pub mod business {
                         .ok_or(anyhow!("couldn't find '/' in {url}"))?
                         .1
                         .to_string();
-                    let (forge, source_branch) = if url.starts_with("https://github.com") {
-                        let forge = Forge::Github;
-                        let source_branch =
-                            self.pullrequest_get_source_branch_github(&number).await?;
+                    let (forge, source_branch) =
+                        if let Ok(override_source_branch) = self.get("OVERRIDE_SOURCE_BRANCH") {
+                            (Forge::Mock, override_source_branch.clone())
+                        } else if url.starts_with("https://github.com") {
+                            let forge = Forge::Github;
+                            let source_branch =
+                                self.pullrequest_get_source_branch_github(&number).await?;
 
-                        (forge, source_branch)
-                    } else {
-                        bail!("unknown forgeo with url: {url}");
-                    };
+                            (forge, source_branch)
+                        } else {
+                            bail!("unknown forge with url: {url}");
+                        };
 
                     Ok(BuildInfoEvent::PullRequest {
                         number,
@@ -165,7 +167,7 @@ pub mod business {
                     let forge = if repository.starts_with("https://github.com") {
                         Forge::Github
                     } else {
-                        bail!("unknown forgeo with repository: {repository}");
+                        bail!("unknown forge with repository: {repository}");
                     };
                     let destination_branch = self.try_branch()?.to_string();
 
@@ -284,6 +286,7 @@ pub mod business {
     #[derive(Debug)]
     pub enum Forge {
         Github,
+        Mock,
     }
 
     /// Verifies that the build current owners are trusted. Checks are case-insensitive.
@@ -294,32 +297,42 @@ pub mod business {
             "github-actions",
         ];
 
-        const TRUSTED_OWNERS_PER_ORG: &[(&str, &[&str])] = &[
+        const STEVEEJ: &[&str] = &[
+            "steveej",
+            "Stefan Junker <mail@stefanjunker.de>",
+            "Stefan Junker <1181362+steveej@users.noreply.github.com>",
+        ];
+
+        let trusted_owners_per_org: &[(&str, &[&str])] = &[
             (
                 "holochain",
                 &[
-                    // admins
-                    "steveej",
-                    "Stefan Junker <mail@stefanjunker.de>",
-                    "evangineer",
-                    // devs
-                    "ThetaSinner",
-                    "cdunster",
-                    "zippy",
-                ],
+                    STEVEEJ,
+                    &[
+                        // admins
+                        "evangineer",
+                        // devs
+                        "ThetaSinner",
+                        "cdunster",
+                        "zippy",
+                    ],
+                ]
+                .concat(),
             ),
             (
                 "holo-host",
                 &[
-                    "steveej",
-                    "Stefan Junker <mail@stefanjunker.de>",
-                    "evangineer",
-                    "JettTech",
-                    "mattgeddes",
-                    "zeeshan595",
-                    "mattgeddes",
-                    "alastairong1",
-                ],
+                    STEVEEJ,
+                    &[
+                        "evangineer",
+                        "JettTech",
+                        "mattgeddes",
+                        "zeeshan595",
+                        "mattgeddes",
+                        "alastairong1",
+                    ],
+                ]
+                .concat(),
             ),
         ];
 
@@ -328,7 +341,7 @@ pub mod business {
         let mut trusted_owners =
             HashSet::<String>::from_iter(TRUSTED_OWNERS.iter().map(|s| s.to_lowercase()));
         trusted_owners.extend(
-            HashMap::<String, HashSet<String>>::from_iter(TRUSTED_OWNERS_PER_ORG.iter().map(
+            HashMap::<String, HashSet<String>>::from_iter(trusted_owners_per_org.iter().map(
                 |(k, v)| {
                     (
                         k.to_lowercase(),
@@ -479,7 +492,9 @@ pub mod business {
         Ok(conclusion)
     }
 
-    pub async fn process_holo_nixpkgs_release(build_info: BuildInfo) -> Result<(), anyhow::Error> {
+    pub async fn process_holo_nixpkgs_release(
+        build_info: BuildInfo,
+    ) -> Result<Option<Vec<String>>, anyhow::Error> {
         if build_info.try_org_repo()? == ("Holo-Host", "holo-nixpkgs")
             && build_info.try_attr()? == HOLO_NIXPKGS_RELEASE_ATTR
         {
@@ -493,7 +508,7 @@ pub mod business {
             let pbs_channels_directory: &str = build_info.get(CHANNELS_DIRECTORY_ENV_KEY)?;
             let pbs_jobsets_directory: &str = build_info.get(CHANNELS_JOBSETS_ENV_KEY)?;
 
-            let channel_names = match build_info.try_event().await? {
+            let maybe_channel_names = match build_info.try_event().await? {
                 BuildInfoEvent::PullRequest {
                     number,
                     source_branch,
@@ -502,30 +517,39 @@ pub mod business {
                     let source_branch_channels = HashSet::<&str>::from_iter(
                         build_info.get(SOURCE_BRANCH_CHANNELS_ENV_KEY)?.split(","),
                     );
-                    debug!("will create channels for these source branches: {source_branch_channels:#?}");
-                    let mut channel_names = vec![number];
+
+                    debug!("configured PR source branches for channel creation: {source_branch_channels:#?}");
+
                     if source_branch_channels.contains(source_branch.as_str()) {
-                        channel_names.push(source_branch);
-                    };
-                    channel_names
+                        // also include the PR number as a channel name
+                        Some(vec![number, source_branch])
+                    } else {
+                        None
+                    }
                 }
                 BuildInfoEvent::Push {
                     destination_branch, ..
-                } => vec![destination_branch],
+                } => Some(vec![destination_branch]),
             };
 
-            let revision = build_info.try_revision()?;
+            debug!("channel names for this build: {maybe_channel_names:#?}");
 
-            create_channel_artifacts(
-                revision,
-                channel_names.as_slice(),
-                pbs_channels_directory,
-                tarball_path,
-                pbs_jobsets_directory,
-            )?;
+            if let Some(channel_names) = &maybe_channel_names {
+                let revision = build_info.try_revision()?;
+
+                create_channel_artifacts(
+                    revision,
+                    channel_names.as_slice(),
+                    pbs_channels_directory,
+                    tarball_path,
+                    pbs_jobsets_directory,
+                )?;
+            }
+
+            Ok(maybe_channel_names)
+        } else {
+            Ok(None)
         }
-
-        Ok(())
     }
 
     fn create_channel_artifacts(
@@ -619,5 +643,90 @@ pub mod business {
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use test_log::test;
+
+        use std::{collections::HashMap, fs::File, io::Write, path::Path};
+
+        use tempfile::tempdir;
+
+        use crate::business::{BuildInfo, CHANNELS_DIRECTORY_ENV_KEY, CHANNELS_JOBSETS_ENV_KEY};
+
+        use super::process_holo_nixpkgs_release;
+
+        fn recurse_and_print<T: IntoIterator<Item = Result<std::fs::DirEntry, std::io::Error>>>(
+            entries: T,
+            seen: &mut std::collections::HashSet<std::path::PathBuf>,
+        ) {
+            for entry in entries {
+                let entry = entry.unwrap();
+                let entry_path = entry.path();
+                let file_type = entry.file_type().unwrap();
+                log::debug!("entry: {entry:#?}");
+                if file_type.is_dir() && !seen.insert(entry_path.clone()) {
+                    recurse_and_print(std::fs::read_dir(entry_path).unwrap(), seen);
+                }
+            }
+        }
+
+        #[test(tokio::test)]
+        async fn test_process_holo_nixpkgs_release() {
+            let mk_buildinfo = |temppath: &Path, source_branch_channels| {
+                BuildInfo(HashMap::from_iter(
+                    [
+                        // TODO: extract some of these into consts that are shared with the code
+                        ("PROP_project", "Holo-Host/holo-nixpkgs"),
+                        ("PROP_attr", "x86_64-linux.holo-nixpkgs-release"),
+                        ("PROP_out_path", temppath.to_str().unwrap()),
+                        ("PROP_event", "pull_request"),
+                        ("PROP_pullrequesturl", "/1"),
+                        ("OVERRIDE_SOURCE_BRANCH", "one"),
+                        ("SOURCE_BRANCH_CHANNELS", source_branch_channels),
+                        ("PROP_revision", "1231"),
+                        (
+                            CHANNELS_DIRECTORY_ENV_KEY,
+                            temppath.join("channels").to_str().unwrap(),
+                        ),
+                        (
+                            CHANNELS_JOBSETS_ENV_KEY,
+                            temppath.join("jobsets").to_str().unwrap(),
+                        ),
+                    ]
+                    .map(|(k, v)| (k.to_string(), v.to_string())),
+                ))
+            };
+
+            for (source_branch_channels, expected) in [
+                ("", None),
+                ("one", Some(vec!["1".to_string(), "one".to_string()])),
+            ] {
+                let tempdir = tempdir().unwrap();
+
+                let out_path = tempdir.path().join("tarballs/nixexprs.tar.xz");
+                std::fs::create_dir_all(out_path.parent().unwrap()).unwrap();
+                let mut out_path_file = File::create_new(&out_path).unwrap();
+                out_path_file
+                    .write_all("not a real archive".as_bytes())
+                    .unwrap();
+
+                let maybe_channel_names = process_holo_nixpkgs_release(mk_buildinfo(
+                    tempdir.path(),
+                    source_branch_channels,
+                ))
+                .await
+                .unwrap();
+
+                assert_eq!(maybe_channel_names, expected);
+
+                // for debugging purposes
+                recurse_and_print(
+                    std::fs::read_dir(tempdir.path()).unwrap(),
+                    &mut Default::default(),
+                );
+            }
+        }
     }
 }
