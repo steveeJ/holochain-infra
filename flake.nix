@@ -544,7 +544,7 @@
               cat >server.template <<EOF
               organization = "An example company"
               cn = "${domain}"
-              expiration_days = 30
+              expiration_days = 60
               dns_name = "${domain}"
               encryption_key
               signing_key
