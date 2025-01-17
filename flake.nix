@@ -55,6 +55,13 @@
     sops-nix.inputs.nixpkgs.follows = "nixpkgs";
     sops-nix.inputs.nixpkgs-stable.follows = "";
 
+    # container definitions
+    extra-container = {
+      url = "github:erikarvstedt/extra-container";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+
     # have the latest rust version available
     craneNixpkgs = {
       url = "github:nixos/nixpkgs/nixos-unstable";
@@ -377,10 +384,6 @@
               # Automatically inherit any build inputs from `my-crate`
               inputsFrom = [
                 devshell
-                (self'.packages.postbuildstepper.override {
-                  inherit craneLib;
-                  stdenv = (cranePkgs.stdenvAdapters.useMoldLinker cranePkgs.stdenv);
-                })
               ];
 
               # Extra inputs (only used for interactive development)
@@ -579,5 +582,87 @@
 
         };
       };
-    };
+    }
+    // inputs.extra-container.lib.eachSupportedSystem (system: {
+      packages = {
+        nomadServer = inputs.extra-container.lib.buildContainers {
+          inherit system;
+
+          config = {
+            containers.nomadServer = {
+              privateNetwork = true;
+              hostAddress = "10.250.0.1";
+              localAddress = "10.250.0.2";
+
+              forwardPorts = [
+                {
+                  containerPort = 4646;
+                  hostPort = 4646;
+                  protocol = "tcp";
+                }
+                {
+                  containerPort = 4647;
+                  hostPort = 4647;
+                  protocol = "tcp";
+                }
+              ];
+
+              config =
+                { ... }:
+                {
+                  nixpkgs.config.allowUnfreePredicate =
+                    pkg: builtins.elem (inputs.nixpkgs.lib.getName pkg) [ "nomad" ];
+
+                  services.nomad = {
+                    enable = true;
+
+                    settings = {
+                      server = {
+                        enabled = true;
+                        bootstrap_expect = 1; # Number of servers required to be online
+                      };
+                    };
+                  };
+
+                  networking.firewall.allowedTCPPorts = [
+                    4646
+                    4647
+                  ];
+                };
+            };
+          };
+        };
+        nomadClient = inputs.extra-container.lib.buildContainers {
+          inherit system;
+
+          config = {
+            containers.nomadClient = {
+              privateNetwork = true;
+              hostAddress = "10.250.0.1";
+              localAddress = "10.250.0.3";
+
+              config =
+                { ... }:
+                {
+                  nixpkgs.config.allowUnfreePredicate =
+                    pkg: builtins.elem (inputs.nixpkgs.lib.getName pkg) [ "nomad" ];
+
+                  services.nomad = {
+                    dropPrivileges = false; # Client requires higher privileges
+
+                    enable = true;
+
+                    settings = {
+                      client = {
+                        enabled = true;
+                        servers = [ "10.250.0.1" ];
+                      };
+                    };
+                  };
+                };
+            };
+          };
+        };
+      };
+    });
 }

@@ -388,6 +388,29 @@
         "type": "github"
       }
     },
+    "extra-container": {
+      "inputs": {
+        "flake-utils": [
+          "flake-utils"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1734005403,
+        "narHash": "sha256-vgh3TqfkFdnPxREBedw4MQehIDc3N8YyxBOB45n+AvU=",
+        "owner": "erikarvstedt",
+        "repo": "extra-container",
+        "rev": "f4de6c329b306a9d3a9798a30e060c166f781baa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "erikarvstedt",
+        "repo": "extra-container",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "locked": {
         "lastModified": 1696426674,
@@ -1471,6 +1494,7 @@
         "darwin": "darwin",
         "devshell": "devshell",
         "disko": "disko",
+        "extra-container": "extra-container",
         "flake-compat": "flake-compat",
         "flake-parts": "flake-parts_2",
         "flake-utils": "flake-utils",
