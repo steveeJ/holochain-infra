@@ -74,6 +74,16 @@
 
       checks =
         let
+          certs = self.lib.makeCert {
+            inherit pkgs;
+            caName = "Example good CA";
+            domains = [
+              s3.endpoint
+              s3.bucket
+              github.endpoint
+            ];
+          };
+
           s3 = {
             bucket = "cache.holo.host";
             endpoint = "s3.wasabisys.com";
@@ -84,17 +94,8 @@
             userKey = "s3user";
             userSecret = "s3usersecret";
 
-            endpointCert = self.lib.makeCert {
-              inherit pkgs;
-              caName = "Example good CA";
-              domain = "${s3.endpoint}";
-            };
-
-            bucketCert = self.lib.makeCert {
-              inherit pkgs;
-              caName = "Example good CA";
-              domain = "${s3.bucket}";
-            };
+            endpointCert = certs;
+            bucketCert = certs;
           };
 
           awsSharedCredentialsFile = pkgs.writeText "aws-shared-credentials" ''
@@ -116,11 +117,7 @@
             endpoint = "api.github.com";
             uri = "https://${github.endpoint}${github.path}";
 
-            endpointCert = self.lib.makeCert {
-              inherit pkgs;
-              caName = "Example good CA";
-              domain = "${github.endpoint}";
-            };
+            endpointCert = certs;
 
             testPat = "github_testpat";
           };

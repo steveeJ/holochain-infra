@@ -525,8 +525,17 @@
             {
               pkgs,
               caName,
-              domain,
+              domain ? builtins.elemAt domains 0,
+              domains ? [ domain ],
             }:
+            let
+              # long validity duration as the certs get cached for a while
+              validity = builtins.toString (365 * 10);
+              dns_names' = builtins.map (domain: ''
+                dns_name = "${domain}"
+              '') domains;
+              dns_names = builtins.concatStringsSep "\n" dns_names';
+            in
             pkgs.runCommand "example-cert" { buildInputs = [ pkgs.gnutls ]; } ''
               mkdir $out
 
@@ -534,7 +543,7 @@
               cat >ca.template <<EOF
               organization = "${caName}"
               cn = "${caName}"
-              expiration_days = 365
+              expiration_days = ${validity}
               ca
               cert_signing_key
               crl_signing_key
@@ -544,8 +553,8 @@
               cat >server.template <<EOF
               organization = "An example company"
               cn = "${domain}"
-              expiration_days = 60
-              dns_name = "${domain}"
+              expiration_days = ${validity}
+              ${dns_names}
               encryption_key
               signing_key
               EOF
@@ -576,7 +585,6 @@
                 --template server.template        \
                 --outfile $out/server.crt
             '';
-
         };
       };
     };
