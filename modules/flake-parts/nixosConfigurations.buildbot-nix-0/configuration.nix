@@ -365,6 +365,7 @@
               SOURCE_BRANCH_CHANNELS = builtins.concatStringsSep "," [
                 "scale-testing"
                 "visvere"
+                "holo-host-canary"
               ];
             };
           command = [ (lib.getExe' self.packages.${pkgs.system}.postbuildstepper "postbuildstepper") ];
